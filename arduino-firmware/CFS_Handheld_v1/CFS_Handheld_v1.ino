@@ -32,7 +32,7 @@
 #define I2C_SDA         4   // D4
 #define I2C_SCL         5   // D5
 #define PN532_IRQ       10  // D10 (optional)
-#define WS2812_PIN      12  // D12 - WS2812 data pin
+#define WS2812_PIN      7  // D12 - WS2812 data pin
 
 // ═══════════════════════════════════════════════════════════
 // HARDWARE
@@ -167,7 +167,7 @@ void setup() {
   // WS2812 LED
   Serial.println("Initializing WS2812 LED...");
   led.begin();
-  led.setBrightness(50);  // 0-255 (50 = ~20% brightness)
+  led.setBrightness(25);  // 0-255 (50 = ~20% brightness)
   setLED(WS_BLUE);  // Blue = starting up
   Serial.println("✅ LED ready");
   
