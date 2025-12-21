@@ -70,7 +70,7 @@ struct ContentView: View {
             Group {
                 switch selectedTab {
                 case 0:
-                    DashboardView()
+                    DashboardView(selectedTab: $selectedTab)
                 case 1:
                     ReadTagView()
                 case 2:
@@ -82,7 +82,7 @@ struct ContentView: View {
                 case 5:
                     SettingsView()
                 default:
-                    DashboardView()
+                    DashboardView(selectedTab: $selectedTab)
                 }
             }
         }
@@ -169,6 +169,7 @@ struct DeviceStatusView: View {
 struct DashboardView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
     @EnvironmentObject var materials: MaterialDatabase
+    @Binding var selectedTab: Int
     
     var body: some View {
         ScrollView {
@@ -190,26 +191,35 @@ struct DashboardView: View {
                 
                 // Quick Actions
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
-                    QuickActionCard(
-                        title: "Read Tag",
-                        icon: "doc.text.magnifyingglass",
-                        color: .blue,
-                        description: "Scan and decode tag data"
-                    )
+                    Button(action: { selectedTab = 1 }) {
+                        QuickActionCard(
+                            title: "Read Tag",
+                            icon: "doc.text.magnifyingglass",
+                            color: .blue,
+                            description: "Scan and decode tag data"
+                        )
+                    }
+                    .buttonStyle(.plain)
                     
-                    QuickActionCard(
-                        title: "Write Tags",
-                        icon: "pencil.circle",
-                        color: .green,
-                        description: "Program dual tag set"
-                    )
+                    Button(action: { selectedTab = 2 }) {
+                        QuickActionCard(
+                            title: "Write Tags",
+                            icon: "pencil.circle",
+                            color: .green,
+                            description: "Program dual tag set"
+                        )
+                    }
+                    .buttonStyle(.plain)
                     
-                    QuickActionCard(
-                        title: "Wipe Tag",
-                        icon: "trash",
-                        color: .red,
-                        description: "Reset to factory defaults"
-                    )
+                    Button(action: { selectedTab = 3 }) {
+                        QuickActionCard(
+                            title: "Wipe Tag",
+                            icon: "trash",
+                            color: .red,
+                            description: "Reset to factory defaults"
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding()
                 
@@ -346,7 +356,18 @@ struct ReadTagView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .disabled(isReading || !bluetooth.isConnected)
-                .padding()
+                
+                if isReading {
+                    Button("Cancel") {
+                        isReading = false
+                        bluetooth.sendCommand("CANCEL")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                }
+                
+                Spacer()
+                    .frame(height: 20)
             }
         }
         .padding()
@@ -357,10 +378,19 @@ struct ReadTagView: View {
     
     func startReading() {
         isReading = true
+        tagInfo = nil  // Clear previous result
         bluetooth.sendCommand("READ")
     }
     
     func handleMessage(_ message: String) {
+        print("ReadTagView handling message: \(message)")  // Debug
+        
+        // Ignore READY and UID messages while already reading
+        if isReading && (message == "READY" || message.hasPrefix("UID:")) {
+            print("Ignoring \(message) - already in reading state")
+            return
+        }
+        
         if message.hasPrefix("TAG_DATA:") {
             // Parse: PLA|165m|#FFFFFF|S/N:000001
             let data = message.replacingOccurrences(of: "TAG_DATA:", with: "")
@@ -377,19 +407,30 @@ struct ReadTagView: View {
                 )
             }
             isReading = false
+            print("Set isReading = false after TAG_DATA")  // Debug
             
         } else if message.hasPrefix("ERROR:") {
+            print("ERROR detected, stopping reading")  // Debug
+            
             let error = message.replacingOccurrences(of: "ERROR:", with: "")
             
-            if error.contains("Not a Creality") {
-                tagInfo = TagInfo(material: "", length: "", color: "000000", serial: "", isBlank: false, isCreality: false)
+            if error.contains("Not a Creality") || error.contains("Auth failed") || error.contains("Encrypted") || error.contains("Decryption") {
+                print("Setting error tagInfo")  // Debug
+                tagInfo = TagInfo(material: "Error: \(error)", length: "", color: "FF0000", serial: "", isBlank: false, isCreality: false)
             } else if error.contains("blank") {
                 tagInfo = TagInfo(material: "", length: "", color: "000000", serial: "", isBlank: true, isCreality: true)
+            } else {
+                // Generic error
+                tagInfo = TagInfo(material: "Error: \(error)", length: "", color: "FF0000", serial: "", isBlank: false, isCreality: false)
+            }
+            
+            // Set this AFTER tagInfo so UI updates together
+            isReading = false
             }
             isReading = false
         }
     }
-}
+
 
 // MARK: - Write Tag View
 struct WriteTagView: View {
@@ -893,7 +934,12 @@ class BluetoothManager: NSObject, ObservableObject {
     @Published var isScanning = false
     @Published var deviceName = "CFS-Programmer"
     @Published var firmwareVersion = "Unknown"
-    @Published var lastMessage = ""
+    @Published var lastMessage = "" {
+        didSet {
+            // Force UI update
+            objectWillChange.send()
+        }
+    }
     
     private var centralManager: CBCentralManager!
     private var peripheral: CBPeripheral?
@@ -974,11 +1020,16 @@ extension BluetoothManager: CBPeripheralDelegate {
         guard let characteristics = service.characteristics else { return }
         
         for characteristic in characteristics {
-            if characteristic.uuid == rxUUID {
-                rxCharacteristic = characteristic
-            } else if characteristic.uuid == txUUID {
+            // Device TX (1c95...) = Mac RX (we receive on this)
+            if characteristic.uuid == txUUID {
                 txCharacteristic = characteristic
                 peripheral.setNotifyValue(true, for: characteristic)
+                print("Enabled notifications on device TX characteristic")
+            }
+            // Device RX (beb5...) = Mac TX (we send on this)
+            else if characteristic.uuid == rxUUID {
+                rxCharacteristic = characteristic
+                print("Found device RX characteristic for sending")
             }
         }
     }
@@ -987,9 +1038,11 @@ extension BluetoothManager: CBPeripheralDelegate {
         guard let data = characteristic.value,
               let message = String(data: data, encoding: .utf8) else { return }
         
+        print("BLE RX: \(message)")  // Debug output
+        
         DispatchQueue.main.async {
             self.lastMessage = message
-            print("BLE RX: \(message)")
+            print("Updated lastMessage to: \(message)")  // Debug output
         }
     }
 }
