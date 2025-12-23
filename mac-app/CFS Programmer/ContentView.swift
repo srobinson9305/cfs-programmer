@@ -16,6 +16,10 @@ import SwiftUI
 import CoreBluetooth
 import Combine
 
+enum BuildConfig {
+    static let githubRepo = "srobinson9305/cfs-programmer"
+}
+
 // MARK: - Main Content View
 struct ContentView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
@@ -823,7 +827,6 @@ struct SettingsView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
     @AppStorage("wifiSSID") private var wifiSSID = ""
     @AppStorage("wifiPassword") private var wifiPassword = ""
-    @AppStorage("githubRepo") private var githubRepo = "yourusername/cfs-programmer"
 
     @State private var showingWiFiConfig = false
     @State private var checkingUpdate = false
@@ -917,19 +920,6 @@ struct SettingsView: View {
                     .padding()
                 }
 
-                // GitHub Configuration
-                GroupBox("GitHub Repository") {
-                    VStack(spacing: 12) {
-                        TextField("Repository (username/repo)", text: $githubRepo)
-                            .textFieldStyle(.roundedBorder)
-
-                        Text("Format: username/repository-name")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                }
-
                 // About
                 GroupBox("About") {
                     VStack(spacing: 12) {
@@ -957,15 +947,17 @@ struct SettingsView: View {
         .onChange(of: bluetooth.lastMessage) { _, newValue in
             handleUpdateMessage(newValue)
         }
+        .onChange(of: bluetooth.isConnected) { _, connected in
+            if !connected {
+                checkingUpdate = false
+                isUpdating = false
+            }
+        }
     }
 
     func checkForUpdate() {
         guard bluetooth.isConnected else {
             updateMessage = "Connect to the device first"
-            return
-        }
-        guard !githubRepo.isEmpty else {
-            updateMessage = "Set your GitHub repo first"
             return
         }
 
@@ -974,7 +966,7 @@ struct SettingsView: View {
 
         Task {
             do {
-                let release = try await GitHubAPI.latestRelease(repo: githubRepo)
+                let release = try await GitHubAPI.latestRelease(repo: BuildConfig.githubRepo)
                 let latest = VersionCompare.normalize(release.tag_name)
                 let current = VersionCompare.normalize(bluetooth.firmwareVersion)
 
@@ -1090,17 +1082,56 @@ enum VersionCompare {
 
 enum GitHubAPI {
     static func latestRelease(repo: String) async throws -> GitHubRelease {
-        // GitHub endpoint: GET /repos/{owner}/{repo}/releases/latest
-        let url = URL(string: "https://api.github.com/repos/srobinson9305/cfs-programmer/releases/latest")!
+        let repo = repo.trimmingCharacters(in: .whitespacesAndNewlines)   // ✅ important
+        let components = repo.split(separator: "/")
+        guard components.count == 2 else {
+            throw NSError(domain: "GitHubAPI", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid repo format. Use: username/repo"])
+        }
+
+        let urlString = "https://api.github.com/repos/\(repo)/releases/latest"
+        print("[GitHub] Fetching: \(urlString)")
+
+        guard let url = URL(string: urlString) else {
+            throw NSError(domain: "GitHubAPI", code: -2,
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid URL: \(urlString)"])
+        }
+
         var req = URLRequest(url: url)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        req.setValue("CFSProgrammer-macOS", forHTTPHeaderField: "User-Agent")
+        req.setValue("CFSProgrammer-macOS/1.2.0", forHTTPHeaderField: "User-Agent")
+        req.timeoutInterval = 10
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+
+            guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+            print("[GitHub] Response status: \(http.statusCode)")
+
+            guard (200...299).contains(http.statusCode) else {
+                let body = String(data: data, encoding: .utf8) ?? "No response body"
+                throw NSError(domain: "GitHubAPI", code: http.statusCode,
+                              userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(body)"])
+            }
+
+            return try JSONDecoder().decode(GitHubRelease.self, from: data)
+
+        } catch let e as URLError {
+            // ✅ This will make your UI message much more actionable
+            let friendly: String
+            switch e.code {
+            case .notConnectedToInternet:
+                friendly = "No internet connection."
+            case .cannotFindHost, .cannotConnectToHost:
+                friendly = "Cannot reach api.github.com (DNS/VPN/adblock/captive portal)."
+            case .timedOut:
+                friendly = "Request timed out."
+            default:
+                friendly = e.localizedDescription
+            }
+            throw NSError(domain: "GitHubAPI", code: e.code.rawValue,
+                          userInfo: [NSLocalizedDescriptionKey: friendly])
         }
-        return try JSONDecoder().decode(GitHubRelease.self, from: data)
     }
 }
 
