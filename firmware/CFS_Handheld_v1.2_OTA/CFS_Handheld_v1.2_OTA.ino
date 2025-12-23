@@ -157,7 +157,7 @@ class ServerCallbacks: public BLEServerCallbacks {
 
 class RxCallbacks: public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
-    String cmd = pCharacteristic->getValue();
+    String cmd = String(pCharacteristic->getValue().c_str());
     Serial.print("BLE RX: ");
     Serial.println(cmd);
 
@@ -624,7 +624,7 @@ void checkForUpdate() {
   if (httpCode == 200) {
     String payload = http.getString();
 
-    StaticJsonDocument<2048> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, payload);
 
     if (!error) {
