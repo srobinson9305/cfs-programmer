@@ -78,8 +78,6 @@ byte pn532response_firmwarevers[] = {
 #define PN532_PACKBUFFSIZ 64                ///< Packet buffer size in bytes
 byte pn532_packetbuffer[PN532_PACKBUFFSIZ]; ///< Packet buffer used in various
                                             ///< transactions
-
-#define SLOWDOWN 1
 /**************************************************************************/
 /*!
     @brief  Instantiates a new PN532 class using software SPI.

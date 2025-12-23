@@ -2,13 +2,15 @@
 //  ContentView.swift
 //  CFS Programmer
 //
-//  Created by Steven Robinson on 12/20/25.
+//  Updated: 2025-12-21
+//  Version: 1.2.0
 //
-
-// CFS Programmer - Complete macOS App
-// ContentView and supporting views
-//
-// This file should be used alongside the existing CFS_ProgrammerApp.swift
+//  NEW FEATURES:
+//  - WiFi configuration for OTA updates
+//  - Firmware version display and checking
+//  - One-click OTA updates from GitHub
+//  - Progress tracking during updates
+//  - All previous fixes maintained
 
 import SwiftUI
 import CoreBluetooth
@@ -19,7 +21,7 @@ struct ContentView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
     @EnvironmentObject var materials: MaterialDatabase
     @State private var selectedTab = 0
-    
+
     var body: some View {
         NavigationView {
             // Sidebar
@@ -34,12 +36,12 @@ struct ContentView: View {
                         .fontWeight(.bold)
                 }
                 .padding()
-                
+
                 // Connection Status
                 ConnectionStatusView()
-                
+
                 Divider()
-                
+
                 // Navigation
                 List(selection: $selectedTab) {
                     Label("Dashboard", systemImage: "gauge")
@@ -48,24 +50,22 @@ struct ContentView: View {
                         .tag(1)
                     Label("Write Tags", systemImage: "pencil.circle")
                         .tag(2)
-                    Label("Wipe Tag", systemImage: "trash")
-                        .tag(3)
                     Label("Materials", systemImage: "doc.text")
-                        .tag(4)
+                        .tag(3)
                     Label("Settings", systemImage: "gearshape")
-                        .tag(5)
+                        .tag(4)
                 }
                 .listStyle(.sidebar)
-                
+
                 Spacer()
-                
+
                 // Device Status
                 if bluetooth.isConnected {
                     DeviceStatusView()
                 }
             }
             .frame(width: 250)
-            
+
             // Main Content
             Group {
                 switch selectedTab {
@@ -76,10 +76,8 @@ struct ContentView: View {
                 case 2:
                     WriteTagView()
                 case 3:
-                    WipeTagView()
-                case 4:
                     MaterialDatabaseView()
-                case 5:
+                case 4:
                     SettingsView()
                 default:
                     DashboardView(selectedTab: $selectedTab)
@@ -92,19 +90,19 @@ struct ContentView: View {
 // MARK: - Connection Status View
 struct ConnectionStatusView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
-    
+
     var body: some View {
         VStack(spacing: 12) {
             HStack {
                 Circle()
                     .fill(bluetooth.isConnected ? Color.green : (bluetooth.isScanning ? Color.orange : Color.gray))
                     .frame(width: 12, height: 12)
-                
+
                 Text(statusText)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
-            
+
             if !bluetooth.isConnected && !bluetooth.isScanning {
                 Button("Connect") {
                     bluetooth.startScanning()
@@ -116,7 +114,7 @@ struct ConnectionStatusView: View {
         .padding()
         .background(Color(NSColor.controlBackgroundColor))
     }
-    
+
     var statusText: String {
         if bluetooth.isConnected {
             return "Connected"
@@ -131,17 +129,17 @@ struct ConnectionStatusView: View {
 // MARK: - Device Status View
 struct DeviceStatusView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Divider()
-            
+
             Text("Device Status")
                 .font(.caption)
                 .fontWeight(.semibold)
                 .foregroundColor(.secondary)
                 .padding(.horizontal)
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Circle()
@@ -150,11 +148,11 @@ struct DeviceStatusView: View {
                     Text(bluetooth.deviceName)
                         .font(.caption)
                 }
-                
+
                 HStack {
                     Image(systemName: "memorychip")
                         .font(.caption2)
-                    Text(bluetooth.firmwareVersion)
+                    Text("FW: \(bluetooth.firmwareVersion)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
@@ -168,29 +166,44 @@ struct DeviceStatusView: View {
 // MARK: - Dashboard View
 struct DashboardView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
-    @EnvironmentObject var materials: MaterialDatabase
     @Binding var selectedTab: Int
-    
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
                 Text("CFS Programmer")
                     .font(.largeTitle)
                     .fontWeight(.bold)
-                
+
                 if bluetooth.isConnected {
-                    Text("Device Connected")
-                        .foregroundColor(.green)
+                    HStack(spacing: 20) {
+                        VStack {
+                            Text("Device Connected")
+                                .foregroundColor(.green)
+                                .font(.headline)
+                            Text("Firmware: \(bluetooth.firmwareVersion)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        if bluetooth.updateAvailable {
+                            Button(action: { selectedTab = 4 }) {
+                                Label("Update Available!", systemImage: "arrow.down.circle.fill")
+                                    .foregroundColor(.orange)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
                 } else {
                     Text("Searching for device...")
                         .foregroundColor(.orange)
                 }
-                
+
                 Divider()
                     .padding(.vertical)
-                
+
                 // Quick Actions
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
                     Button(action: { selectedTab = 1 }) {
                         QuickActionCard(
                             title: "Read Tag",
@@ -200,7 +213,7 @@ struct DashboardView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    
+
                     Button(action: { selectedTab = 2 }) {
                         QuickActionCard(
                             title: "Write Tags",
@@ -210,19 +223,9 @@ struct DashboardView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    
-                    Button(action: { selectedTab = 3 }) {
-                        QuickActionCard(
-                            title: "Wipe Tag",
-                            icon: "trash",
-                            color: .red,
-                            description: "Reset to factory defaults"
-                        )
-                    }
-                    .buttonStyle(.plain)
                 }
                 .padding()
-                
+
                 Spacer()
             }
             .padding()
@@ -235,16 +238,16 @@ struct QuickActionCard: View {
     let icon: String
     let color: Color
     let description: String
-    
+
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 40))
                 .foregroundColor(color)
-            
+
             Text(title)
                 .font(.headline)
-            
+
             Text(description)
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -262,8 +265,9 @@ struct ReadTagView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
     @State private var isReading = false
     @State private var tagInfo: TagInfo?
-    
-    struct TagInfo {
+    @State private var updateTrigger = false
+
+    struct TagInfo: Equatable {
         let material: String
         let length: String
         let color: String
@@ -271,36 +275,49 @@ struct ReadTagView: View {
         let isBlank: Bool
         let isCreality: Bool
     }
-    
+
     var body: some View {
         VStack(spacing: 20) {
             Text("Read Tag")
                 .font(.largeTitle)
                 .fontWeight(.bold)
-            
+
             Text("Scan and decode CFS tag information")
                 .foregroundColor(.secondary)
-            
+
             Divider()
-            
+
             if let info = tagInfo {
-                // Display tag info
                 ScrollView {
                     VStack(spacing: 20) {
-                        if !info.isCreality {
+                        if info.isBlank {
+                            StatusBanner(
+                                icon: "doc",
+                                title: "Blank Tag Detected - Ready to Write",
+                                color: .blue
+                            )
+                        } else if !info.isCreality {
                             StatusBanner(
                                 icon: "exclamationmark.triangle.fill",
                                 title: "Not a Creality CFS Tag",
                                 color: .orange
                             )
-                        } else if info.isBlank {
-                            StatusBanner(
-                                icon: "doc",
-                                title: "Blank Tag Detected",
-                                color: .blue
-                            )
+
+                            GroupBox {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text(info.material)
+                                        .font(.body)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding()
+                            }
                         } else {
-                            // Valid tag display
+                            StatusBanner(
+                                icon: "checkmark.circle.fill",
+                                title: "Valid Creality Tag",
+                                color: .green
+                            )
+
                             GroupBox {
                                 VStack(alignment: .leading, spacing: 16) {
                                     InfoRow(label: "Material", value: info.material)
@@ -316,6 +333,7 @@ struct ReadTagView: View {
                                                 .fill(Color(hex: info.color) ?? .gray)
                                                 .frame(width: 30, height: 30)
                                             Text("#\(info.color)")
+                                                .font(.system(.body, design: .monospaced))
                                         }
                                     }
                                     Divider()
@@ -324,31 +342,31 @@ struct ReadTagView: View {
                                 .padding()
                             }
                         }
-                        
+
                         Button("Read Another Tag") {
                             tagInfo = nil
+                            isReading = false
                         }
                         .buttonStyle(.borderedProminent)
                     }
                     .padding()
                 }
             } else {
-                // Read interface
                 Spacer()
-                
+
                 VStack(spacing: 30) {
                     Image(systemName: isReading ? "wave.3.forward.circle.fill" : "wave.3.forward.circle")
                         .font(.system(size: 80))
                         .foregroundColor(isReading ? .blue : .gray)
                         .symbolEffect(.pulse, isActive: isReading)
-                    
+
                     Text(isReading ? "Waiting for tag..." : "Ready to read")
                         .font(.title2)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 Button(action: startReading) {
                     Label(isReading ? "Reading..." : "Read Tag", systemImage: "doc.text.magnifyingglass")
                         .frame(maxWidth: .infinity)
@@ -356,184 +374,258 @@ struct ReadTagView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .disabled(isReading || !bluetooth.isConnected)
-                
+
                 if isReading {
                     Button("Cancel") {
                         isReading = false
+                        tagInfo = nil
                         bluetooth.sendCommand("CANCEL")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
                 }
-                
+
                 Spacer()
                     .frame(height: 20)
             }
         }
         .padding()
+        .id(updateTrigger)
         .onChange(of: bluetooth.lastMessage) { _, newValue in
             handleMessage(newValue)
         }
     }
-    
+
     func startReading() {
         isReading = true
-        tagInfo = nil  // Clear previous result
+        tagInfo = nil
         bluetooth.sendCommand("READ")
     }
-    
+
     func handleMessage(_ message: String) {
-        print("ReadTagView handling message: \(message)")  // Debug
-        
-        // Ignore READY and UID messages while already reading
-        if isReading && (message == "READY" || message.hasPrefix("UID:")) {
-            print("Ignoring \(message) - already in reading state")
+        print("[ReadTag] Message: \(message)")
+
+        if message == "BLANK_TAG" {
+            tagInfo = TagInfo(
+                material: "Blank",
+                length: "0m",
+                color: "CCCCCC",
+                serial: "N/A",
+                isBlank: true,
+                isCreality: true
+            )
+            isReading = false
+            updateTrigger.toggle()
             return
         }
-        
+
         if message.hasPrefix("TAG_DATA:") {
-            // Parse: PLA|165m|#FFFFFF|S/N:000001
             let data = message.replacingOccurrences(of: "TAG_DATA:", with: "")
             let parts = data.split(separator: "|")
-            
+
             if parts.count >= 4 {
+                let colorHex = String(parts[2]).replacingOccurrences(of: "#", with: "")
                 tagInfo = TagInfo(
                     material: String(parts[0]),
                     length: String(parts[1]),
-                    color: String(parts[2].dropFirst()),  // Remove #
+                    color: colorHex,
                     serial: String(parts[3].replacingOccurrences(of: "S/N:", with: "")),
                     isBlank: false,
                     isCreality: true
                 )
             }
             isReading = false
-            print("Set isReading = false after TAG_DATA")  // Debug
-            
-        } else if message.hasPrefix("ERROR:") {
-            print("ERROR detected, stopping reading")  // Debug
-            
+            updateTrigger.toggle()
+            return
+        }
+
+        if message.hasPrefix("ERROR:") {
             let error = message.replacingOccurrences(of: "ERROR:", with: "")
-            
-            if error.contains("Not a Creality") || error.contains("Auth failed") || error.contains("Encrypted") || error.contains("Decryption") {
-                print("Setting error tagInfo")  // Debug
-                tagInfo = TagInfo(material: "Error: \(error)", length: "", color: "FF0000", serial: "", isBlank: false, isCreality: false)
-            } else if error.contains("blank") {
-                tagInfo = TagInfo(material: "", length: "", color: "000000", serial: "", isBlank: true, isCreality: true)
-            } else {
-                // Generic error
-                tagInfo = TagInfo(material: "Error: \(error)", length: "", color: "FF0000", serial: "", isBlank: false, isCreality: false)
-            }
-            
-            // Set this AFTER tagInfo so UI updates together
+            tagInfo = TagInfo(
+                material: error,
+                length: "",
+                color: "FF0000",
+                serial: "",
+                isBlank: false,
+                isCreality: false
+            )
             isReading = false
-            }
-            isReading = false
+            updateTrigger.toggle()
         }
     }
-
+}
 
 // MARK: - Write Tag View
 struct WriteTagView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
     @EnvironmentObject var materials: MaterialDatabase
-    
+
     @State private var selectedMaterial: Material?
-    @State private var selectedWeight: FilamentWeight = .grams500
+    @State private var selectedWeight: FilamentWeight = .kilograms1
     @State private var selectedColor = Color.white
-    @State private var batchNumber = ""
+    @State private var customSerial = ""
+    @State private var useCustomSerial = false
     @State private var isWriting = false
-    @State private var writeStep = 0  // 0=ready, 1=tag1, 2=tag2, 3=complete
-    
+    @State private var writeStep = 0
+    @State private var generatedSerial = ""
+    @State private var cfsDataToWrite = ""
+
     var body: some View {
         VStack(spacing: 20) {
             Text("Write Dual Tag Set")
                 .font(.largeTitle)
                 .fontWeight(.bold)
-            
+
             Text("Configure and write matching front/back tags")
                 .foregroundColor(.secondary)
-            
+
             Divider()
-            
+
             if writeStep == 0 {
-                // Configuration
-                Form {
-                    Section("Material") {
-                        Picker("Type", selection: $selectedMaterial) {
-                            Text("Select material...").tag(nil as Material?)
-                            ForEach(materials.materials) { material in
-                                Text(material.name).tag(material as Material?)
+                ScrollView {
+                    Form {
+                        Section("Material") {
+                            Picker("Type", selection: $selectedMaterial) {
+                                Text("Select material...").tag(nil as Material?)
+                                ForEach(materials.materials) { material in
+                                    Text(material.name).tag(material as Material?)
+                                }
                             }
                         }
-                    }
-                    
-                    Section("Specifications") {
-                        Picker("Weight", selection: $selectedWeight) {
-                            ForEach(FilamentWeight.allCases) { weight in
-                                Text(weight.displayName).tag(weight)
+
+                        Section("Specifications") {
+                            Picker("Weight", selection: $selectedWeight) {
+                                ForEach(FilamentWeight.allCases) { weight in
+                                    Text(weight.displayName).tag(weight)
+                                }
+                            }
+
+                            ColorPicker("Color", selection: $selectedColor)
+
+                            Toggle("Use Custom Serial", isOn: $useCustomSerial)
+
+                            if useCustomSerial {
+                                TextField("Serial (6 digits)", text: $customSerial)
+                                    .textFieldStyle(.roundedBorder)
+                                    .onChange(of: customSerial) { _, newValue in
+                                        customSerial = String(newValue.prefix(6))
+                                    }
                             }
                         }
-                        
-                        ColorPicker("Color", selection: $selectedColor)
-                        
-                        TextField("Batch Number (2 chars)", text: $batchNumber)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    
-                    if selectedMaterial != nil {
-                        Section("Preview") {
-                            VStack(alignment: .leading, spacing: 8) {
-                                InfoRow(label: "Material", value: selectedMaterial!.name)
-                                InfoRow(label: "Weight", value: selectedWeight.displayName)
-                                InfoRow(label: "Length", value: selectedWeight.lengthMeters)
-                                HStack {
-                                    Text("Color:")
-                                    Spacer()
-                                    Circle()
-                                        .fill(selectedColor)
-                                        .frame(width: 20, height: 20)
-                                    Text(selectedColor.toHex())
+
+                        if selectedMaterial != nil {
+                            Section("Preview") {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    InfoRow(label: "Material", value: selectedMaterial!.name)
+                                    InfoRow(label: "Type ID", value: selectedMaterial!.filmamentID)
+                                    InfoRow(label: "Weight", value: selectedWeight.displayName)
+                                    InfoRow(label: "Length", value: selectedWeight.lengthMeters)
+                                    HStack {
+                                        Text("Color:")
+                                            .fontWeight(.semibold)
+                                        Spacer()
+                                        HStack {
+                                            Circle()
+                                                .fill(selectedColor)
+                                                .frame(width: 20, height: 20)
+                                            Text(selectedColor.toHex())
+                                                .font(.system(.caption, design: .monospaced))
+                                        }
+                                    }
+                                    if useCustomSerial && customSerial.count == 6 {
+                                        InfoRow(label: "Serial", value: customSerial, mono: true)
+                                    } else {
+                                        InfoRow(label: "Serial", value: "Auto-generated", mono: false)
+                                    }
                                 }
                             }
                         }
                     }
+                    .formStyle(.grouped)
                 }
-                .formStyle(.grouped)
-                
+
+                HStack(spacing: 12) {
+                    Spacer()
+
+                    Button(action: startWriting) {
+                        Label("Write Both Tags", systemImage: "square.on.square")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(!canWrite)
+                }
+                .padding()
+
+            } else if writeStep < 3 {
                 Spacer()
-                
-                Button(action: startWriting) {
-                    Label("Write Dual Tag Set", systemImage: "square.on.square")
-                        .frame(maxWidth: .infinity)
+
+                VStack(spacing: 30) {
+                    ProgressView(value: Double(writeStep), total: 2)
+                        .progressViewStyle(.linear)
+                        .frame(maxWidth: 300)
+
+                    Image(systemName: "wave.3.forward.circle.fill")
+                        .font(.system(size: 80))
+                        .foregroundColor(.blue)
+                        .symbolEffect(.pulse)
+
+                    Text(writeStepText)
+                        .font(.title2)
+
+                    Text("Place tag on reader...")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Button("Cancel") {
+                    writeStep = 0
+                    isWriting = false
+                    bluetooth.sendCommand("CANCEL")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .padding()
+
+            } else {
+                Spacer()
+
+                VStack(spacing: 30) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 80))
+                        .foregroundColor(.green)
+
+                    Text("Complete!")
+                        .font(.title)
+                        .fontWeight(.bold)
+
+                    Text("Both tags written successfully")
+                        .foregroundColor(.secondary)
+
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 8) {
+                            InfoRow(label: "Material", value: selectedMaterial?.name ?? "")
+                            InfoRow(label: "Serial", value: generatedSerial, mono: true)
+                        }
+                        .padding()
+                    }
+                    .frame(maxWidth: 400)
+                }
+
+                Spacer()
+
+                Button("Write Another Set") {
+                    writeStep = 0
+                    isWriting = false
+                    selectedMaterial = nil
+                    customSerial = ""
+                    useCustomSerial = false
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(selectedMaterial == nil || !bluetooth.isConnected)
                 .padding()
-                
-            } else {
-                // Writing progress
-                VStack(spacing: 30) {
-                    ProgressView(value: Double(writeStep), total: 3)
-                        .progressViewStyle(.linear)
-                    
-                    Image(systemName: writeStep == 3 ? "checkmark.circle.fill" : "wave.3.forward.circle.fill")
-                        .font(.system(size: 80))
-                        .foregroundColor(writeStep == 3 ? .green : .blue)
-                        .symbolEffect(.pulse, isActive: writeStep < 3)
-                    
-                    Text(writeStepText)
-                        .font(.title2)
-                    
-                    if writeStep == 3 {
-                        Button("Write Another Set") {
-                            writeStep = 0
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-                
-                Spacer()
             }
         }
         .padding()
@@ -541,149 +633,79 @@ struct WriteTagView: View {
             handleMessage(newValue)
         }
     }
-    
+
+    var canWrite: Bool {
+        if !bluetooth.isConnected { return false }
+        if selectedMaterial == nil { return false }
+        if useCustomSerial && customSerial.count != 6 { return false }
+        return true
+    }
+
     var writeStepText: String {
         switch writeStep {
-        case 1: return "Place Tag 1 of 2..."
-        case 2: return "Place Tag 2 of 2..."
-        case 3: return "Complete! Both tags written ✓"
+        case 1: return "Tag 1 of 2"
+        case 2: return "Tag 2 of 2"
         default: return ""
         }
     }
-    
+
     func startWriting() {
         guard let material = selectedMaterial else { return }
-        
-        let cfsData = generateCFSData(material: material, weight: selectedWeight, color: selectedColor, batch: batchNumber)
-        
+
+        if useCustomSerial && customSerial.count == 6 {
+            generatedSerial = customSerial
+        } else {
+            generatedSerial = generateUniqueSerial()
+        }
+
+        cfsDataToWrite = generateCFSData(
+            material: material,
+            weight: selectedWeight,
+            color: selectedColor,
+            serial: generatedSerial
+        )
+
         writeStep = 1
         isWriting = true
-        bluetooth.sendCommand("WRITE:\(cfsData)")
+        bluetooth.sendCommand("WRITE:\(cfsDataToWrite)")
     }
-    
+
     func handleMessage(_ message: String) {
-        if message == "TAG1_OK" {
+        if message == "TAG1_WRITTEN" || message.contains("Tag 1") {
             writeStep = 2
-        } else if message == "TAG2_OK" {
+        } else if message == "TAG2_WRITTEN" || message.contains("Tag 2") || message.contains("WRITE_COMPLETE") {
             writeStep = 3
+            isWriting = false
+        } else if message.hasPrefix("ERROR:") {
+            writeStep = 0
             isWriting = false
         }
     }
-    
-    func generateCFSData(material: Material, weight: FilamentWeight, color: Color, batch: String) -> String {
+
+    func generateUniqueSerial() -> String {
+        return String(format: "%06d", Int.random(in: 1...999999))
+    }
+
+    func generateCFSData(material: Material, weight: FilamentWeight, color: Color, serial: String) -> String {
         let dateCode = formatDateCode()
         let vendor = "0276"
-        let batchCode = batch.padding(toLength: 2, withPad: "0", startingAt: 0)
+        let unknown = "A2"
         let filmID = material.filmamentID
         let colorHex = "0" + color.toHex()
         let length = weight.hexLength
-        let serial = String(format: "%06d", Int.random(in: 1...999999))
-        
-        return "AB\(dateCode)\(vendor)\(batchCode)\(filmID)\(colorHex)\(length)\(serial)00000000000000"
+        let reserve = "00000000000000"
+
+        return "\(dateCode)\(vendor)\(unknown)\(filmID)\(colorHex)\(length)\(serial)\(reserve)"
     }
-    
+
     func formatDateCode() -> String {
         let date = Date()
         let calendar = Calendar.current
         let month = calendar.component(.month, from: date)
         let day = calendar.component(.day, from: date)
         let year = calendar.component(.year, from: date) % 100
-        
-        return String(format: "%X%02d%02d", month, day, year)
-    }
-}
 
-// MARK: - Wipe Tag View
-struct WipeTagView: View {
-    @EnvironmentObject var bluetooth: BluetoothManager
-    @State private var isWiping = false
-    @State private var showConfirmation = false
-    @State private var wipeComplete = false
-    
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Wipe Tag")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-            
-            Text("Reset tag to factory defaults")
-                .foregroundColor(.secondary)
-            
-            Divider()
-            
-            StatusBanner(
-                icon: "exclamationmark.triangle.fill",
-                title: "Warning: This will permanently erase all data",
-                color: .orange
-            )
-            
-            Spacer()
-            
-            if wipeComplete {
-                VStack(spacing: 30) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 80))
-                        .foregroundColor(.green)
-                    
-                    Text("Tag Wiped Successfully")
-                        .font(.title2)
-                    
-                    Button("Wipe Another Tag") {
-                        wipeComplete = false
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            } else if isWiping {
-                VStack(spacing: 30) {
-                    ProgressView()
-                        .scaleEffect(2)
-                    
-                    Text("Place tag on reader...")
-                        .font(.title2)
-                }
-            } else {
-                VStack(spacing: 30) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 80))
-                        .foregroundColor(.gray)
-                    
-                    Text("Ready to wipe tag")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            Spacer()
-            
-            Button(action: { showConfirmation = true }) {
-                Label("Wipe Tag", systemImage: "trash")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-            .controlSize(.large)
-            .disabled(isWiping || !bluetooth.isConnected)
-            .padding()
-            .confirmationDialog("Wipe Tag?", isPresented: $showConfirmation, titleVisibility: .visible) {
-                Button("Wipe Tag", role: .destructive) {
-                    startWiping()
-                }
-            } message: {
-                Text("This will permanently erase all data. This cannot be undone.")
-            }
-        }
-        .padding()
-        .onChange(of: bluetooth.lastMessage) { _, newValue in
-            if newValue == "WIPE_OK" {
-                isWiping = false
-                wipeComplete = true
-            }
-        }
-    }
-    
-    func startWiping() {
-        isWiping = true
-        bluetooth.sendCommand("WIPE")
+        return String(format: "AB%X%02d", month * 10 + day, year)
     }
 }
 
@@ -691,23 +713,23 @@ struct WipeTagView: View {
 struct MaterialDatabaseView: View {
     @EnvironmentObject var materials: MaterialDatabase
     @State private var showingAddMaterial = false
-    
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Material Database")
                     .font(.largeTitle)
                     .fontWeight(.bold)
-                
+
                 Spacer()
-                
+
                 Button(action: { showingAddMaterial = true }) {
                     Label("Add Material", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
             }
             .padding()
-            
+
             List {
                 ForEach(materials.materials) { material in
                     HStack {
@@ -718,9 +740,9 @@ struct MaterialDatabaseView: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
-                        
+
                         Spacer()
-                        
+
                         VStack(alignment: .trailing, spacing: 4) {
                             Text(material.vendor)
                             Text(material.category)
@@ -741,37 +763,41 @@ struct MaterialDatabaseView: View {
 struct AddMaterialView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var materials: MaterialDatabase
-    
+
     @State private var name = ""
     @State private var filmamentID = ""
     @State private var vendor = "Creality"
     @State private var category = "PLA"
-    
+
     var body: some View {
         VStack(spacing: 20) {
             Text("Add New Material")
                 .font(.title)
                 .fontWeight(.bold)
-            
+
             Form {
                 TextField("Name", text: $name)
                 TextField("Filament ID (6 digits)", text: $filmamentID)
+                    .onChange(of: filmamentID) { _, newValue in
+                        filmamentID = String(newValue.prefix(6))
+                    }
                 TextField("Vendor", text: $vendor)
                 Picker("Category", selection: $category) {
                     Text("PLA").tag("PLA")
                     Text("PETG").tag("PETG")
                     Text("ABS").tag("ABS")
                     Text("TPU").tag("TPU")
+                    Text("Nylon").tag("Nylon")
                 }
             }
             .formStyle(.grouped)
-            
+
             HStack {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                
+
                 Spacer()
-                
+
                 Button("Add") {
                     materials.materials.append(Material(
                         name: name,
@@ -792,26 +818,385 @@ struct AddMaterialView: View {
     }
 }
 
-// MARK: - Settings View
+// MARK: - Settings View (NEW - WITH OTA!)
 struct SettingsView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
-    
+    @AppStorage("wifiSSID") private var wifiSSID = ""
+    @AppStorage("wifiPassword") private var wifiPassword = ""
+    @AppStorage("githubRepo") private var githubRepo = "yourusername/cfs-programmer"
+
+    @State private var showingWiFiConfig = false
+    @State private var checkingUpdate = false
+    @State private var updateMessage = ""
+    @State private var availableVersion = ""
+    @State private var downloadURL = ""
+    @State private var showingUpdatePrompt = false
+    @State private var isUpdating = false
+
     var body: some View {
-        Form {
-            Section("Device") {
-                InfoRow(label: "Name", value: bluetooth.deviceName)
-                InfoRow(label: "Firmware", value: bluetooth.firmwareVersion)
-                InfoRow(label: "Status", value: bluetooth.isConnected ? "Connected" : "Disconnected")
+        ScrollView {
+            VStack(spacing: 20) {
+                Text("Settings")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+
+                Divider()
+
+                // Device Info
+                GroupBox("Device Information") {
+                    VStack(spacing: 12) {
+                        InfoRow(label: "Name", value: bluetooth.deviceName)
+                        Divider()
+                        InfoRow(label: "Firmware", value: bluetooth.firmwareVersion)
+                        Divider()
+                        InfoRow(label: "Status", value: bluetooth.isConnected ? "Connected" : "Disconnected")
+                    }
+                    .padding()
+                }
+
+                // WiFi Configuration
+                GroupBox("WiFi Configuration") {
+                    VStack(spacing: 12) {
+                        HStack {
+                            Image(systemName: "wifi")
+                                .foregroundColor(.blue)
+                            Text("Configure WiFi for OTA updates")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                        }
+
+                        Button(action: { showingWiFiConfig = true }) {
+                            Label(wifiSSID.isEmpty ? "Configure WiFi" : "WiFi: \(wifiSSID)", systemImage: "gear")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding()
+                }
+
+                // Firmware Update
+                GroupBox("Firmware Updates") {
+                    VStack(spacing: 12) {
+                        HStack {
+                            Image(systemName: "arrow.down.circle")
+                                .foregroundColor(.blue)
+                            VStack(alignment: .leading) {
+                                Text("Current: \(bluetooth.firmwareVersion)")
+                                    .font(.caption)
+                                if bluetooth.updateAvailable {
+                                    Text("Update available!")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                }
+                            }
+                            Spacer()
+                        }
+
+                        if !updateMessage.isEmpty {
+                            Text(updateMessage)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+
+                        HStack {
+                            Button(action: checkForUpdate) {
+                                Label(checkingUpdate ? "Checking..." : "Check for Updates", systemImage: "arrow.clockwise")
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(checkingUpdate || !bluetooth.isConnected || wifiSSID.isEmpty)
+
+                            if bluetooth.updateAvailable {
+                                Button(action: { showingUpdatePrompt = true }) {
+                                    Label("Install Update", systemImage: "arrow.down.circle.fill")
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        }
+                    }
+                    .padding()
+                }
+
+                // GitHub Configuration
+                GroupBox("GitHub Repository") {
+                    VStack(spacing: 12) {
+                        TextField("Repository (username/repo)", text: $githubRepo)
+                            .textFieldStyle(.roundedBorder)
+
+                        Text("Format: username/repository-name")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                }
+
+                // About
+                GroupBox("About") {
+                    VStack(spacing: 12) {
+                        InfoRow(label: "App Version", value: "1.2.0")
+                        Divider()
+                        InfoRow(label: "Build Date", value: "2025-12-21")
+                    }
+                    .padding()
+                }
             }
-            
-            Section("About") {
-                InfoRow(label: "App Version", value: "1.0.0")
-                InfoRow(label: "Build", value: "2024.12")
+            .padding()
+        }
+        .frame(maxWidth: 700)
+        .sheet(isPresented: $showingWiFiConfig) {
+            WiFiConfigView(ssid: $wifiSSID, password: $wifiPassword)
+        }
+        .alert("Firmware Update Available", isPresented: $showingUpdatePrompt) {
+            Button("Cancel", role: .cancel) { }
+            Button("Install Now") {
+                performUpdate()
+            }
+        } message: {
+            Text("Version \(availableVersion) is available. The device will reboot after the update completes (30-60 seconds).")
+        }
+        .onChange(of: bluetooth.lastMessage) { _, newValue in
+            handleUpdateMessage(newValue)
+        }
+    }
+
+    func checkForUpdate() {
+        guard bluetooth.isConnected else {
+            updateMessage = "Connect to the device first"
+            return
+        }
+        guard !githubRepo.isEmpty else {
+            updateMessage = "Set your GitHub repo first"
+            return
+        }
+
+        checkingUpdate = true
+        updateMessage = "Checking GitHub..."
+
+        Task {
+            do {
+                let release = try await GitHubAPI.latestRelease(repo: githubRepo)
+                let latest = VersionCompare.normalize(release.tag_name)
+                let current = VersionCompare.normalize(bluetooth.firmwareVersion)
+
+                // Pick an asset URL (prefer .bin, else first asset)
+                let assetURL = release.assets.first(where: { $0.name.lowercased().hasSuffix(".bin") })?.browser_download_url
+                            ?? release.assets.first?.browser_download_url
+                            ?? ""
+
+                await MainActor.run {
+                    checkingUpdate = false
+
+                    if VersionCompare.compare(current, latest) >= 0 {
+                        bluetooth.updateAvailable = false
+                        availableVersion = latest
+                        downloadURL = ""
+                        updateMessage = "Firmware is up to date (\(current))"
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { updateMessage = "" }
+                    } else {
+                        availableVersion = latest
+                        downloadURL = assetURL
+                        bluetooth.updateAvailable = !assetURL.isEmpty
+                        updateMessage = assetURL.isEmpty
+                            ? "Update exists (\(latest)) but no firmware asset found on the release."
+                            : "Update available: \(latest)"
+                        showingUpdatePrompt = !assetURL.isEmpty
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    checkingUpdate = false
+                    bluetooth.updateAvailable = false
+                    updateMessage = "GitHub check failed: \(error.localizedDescription)"
+                }
             }
         }
-        .formStyle(.grouped)
-        .frame(maxWidth: 600)
+    }
+
+    func performUpdate() {
+        isUpdating = true
+        updateMessage = "Updating firmware..."
+        bluetooth.sendCommand("OTA_UPDATE:\(downloadURL)")
+    }
+
+    func handleUpdateMessage(_ message: String) {
+        if message.hasPrefix("UPDATE_AVAILABLE:") {
+            checkingUpdate = false
+            let parts = message.replacingOccurrences(of: "UPDATE_AVAILABLE:", with: "").split(separator: ",")
+            if parts.count == 2 {
+                availableVersion = String(parts[0])
+                downloadURL = String(parts[1])
+                bluetooth.updateAvailable = true
+                updateMessage = "Version \(availableVersion) available!"
+                showingUpdatePrompt = true
+            }
+        } else if message == "UP_TO_DATE" {
+            checkingUpdate = false
+            bluetooth.updateAvailable = false
+            updateMessage = "Firmware is up to date!"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                updateMessage = ""
+            }
+        } else if message == "UPDATE_SUCCESS" {
+            isUpdating = false
+            updateMessage = "Update successful! Device rebooting..."
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                updateMessage = ""
+                bluetooth.updateAvailable = false
+            }
+        } else if message.hasPrefix("ERROR:") && (checkingUpdate || isUpdating) {
+            checkingUpdate = false
+            isUpdating = false
+            let error = message.replacingOccurrences(of: "ERROR:", with: "")
+            updateMessage = "Error: \(error)"
+        } else if message == "DISCONNECTED" && isUpdating {
+            checkingUpdate = false
+            isUpdating = false
+            updateMessage = "Device rebooting… waiting to reconnect"
+        }
+    }
+}
+
+struct GitHubRelease: Decodable {
+    struct Asset: Decodable {
+        let name: String
+        let browser_download_url: String
+    }
+    let tag_name: String
+    let assets: [Asset]
+}
+
+enum VersionCompare {
+    static func normalize(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespacesAndNewlines)
+         .replacingOccurrences(of: "\0", with: "")
+         .replacingOccurrences(of: "v", with: "") // handles "v1.2.3"
+    }
+
+    // Returns: -1 if a<b, 0 if a==b, 1 if a>b
+    static func compare(_ a: String, _ b: String) -> Int {
+        let pa = normalize(a).split(separator: ".").map { Int($0) ?? 0 }
+        let pb = normalize(b).split(separator: ".").map { Int($0) ?? 0 }
+        let n = max(pa.count, pb.count)
+
+        for i in 0..<n {
+            let va = i < pa.count ? pa[i] : 0
+            let vb = i < pb.count ? pb[i] : 0
+            if va < vb { return -1 }
+            if va > vb { return 1 }
+        }
+        return 0
+    }
+}
+
+enum GitHubAPI {
+    static func latestRelease(repo: String) async throws -> GitHubRelease {
+        // GitHub endpoint: GET /repos/{owner}/{repo}/releases/latest
+        let url = URL(string: "https://api.github.com/repos/srobinson9305/cfs-programmer/releases/latest")!
+        var req = URLRequest(url: url)
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        req.setValue("CFSProgrammer-macOS", forHTTPHeaderField: "User-Agent")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(GitHubRelease.self, from: data)
+    }
+}
+
+struct WiFiConfigView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var bluetooth: BluetoothManager
+    @Binding var ssid: String
+    @Binding var password: String
+
+    @State private var tempSSID = ""
+    @State private var tempPassword = ""
+    @State private var showPassword = false
+    @State private var isSaving = false
+    @State private var saveMessage = ""
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("WiFi Configuration")
+                .font(.title)
+                .fontWeight(.bold)
+
+            Text("Required for OTA firmware updates")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Form {
+                Section("Network Settings") {
+                    TextField("WiFi Network Name (SSID)", text: $tempSSID)
+                        .textFieldStyle(.roundedBorder)
+
+                    HStack {
+                        if showPassword {
+                            TextField("Password", text: $tempPassword)
+                                .textFieldStyle(.roundedBorder)
+                        } else {
+                            SecureField("Password", text: $tempPassword)
+                                .textFieldStyle(.roundedBorder)
+                        }
+
+                        Button(action: { showPassword.toggle() }) {
+                            Image(systemName: showPassword ? "eye.slash" : "eye")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+
+            if !saveMessage.isEmpty {
+                Text(saveMessage)
+                    .font(.caption)
+                    .foregroundColor(saveMessage.contains("Success") ? .green : .orange)
+            }
+
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button(action: saveWiFiConfig) {
+                    Label(isSaving ? "Saving..." : "Save", systemImage: "checkmark")
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(tempSSID.isEmpty || tempPassword.isEmpty || isSaving)
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
+        }
         .padding()
+        .frame(width: 400, height: 350)
+        .onAppear {
+            tempSSID = ssid
+            tempPassword = password
+        }
+        .onChange(of: bluetooth.lastMessage) { _, newValue in
+            if newValue == "WIFI_OK" {
+                isSaving = false
+                saveMessage = "Success! WiFi configured."
+                ssid = tempSSID
+                password = tempPassword
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    dismiss()
+                }
+            }
+        }
+    }
+
+    func saveWiFiConfig() {
+        guard !tempSSID.isEmpty && !tempPassword.isEmpty else { return }
+
+        isSaving = true
+        saveMessage = "Sending to device..."
+        bluetooth.sendCommand("WIFI_CONFIG:\(tempSSID),\(tempPassword)")
     }
 }
 
@@ -820,7 +1205,7 @@ struct StatusBanner: View {
     let icon: String
     let title: String
     let color: Color
-    
+
     var body: some View {
         HStack {
             Image(systemName: icon)
@@ -839,7 +1224,7 @@ struct InfoRow: View {
     let label: String
     let value: String
     var mono: Bool = false
-    
+
     var body: some View {
         HStack {
             Text(label + ":")
@@ -853,17 +1238,16 @@ struct InfoRow: View {
 
 // MARK: - Data Models
 struct Material: Identifiable, Codable, Hashable {
-    var id = UUID()  // Changed to var for Codable
+    var id = UUID()
     var name: String
     var filmamentID: String
     var vendor: String
     var category: String
-    
-    // Hashable conformance
+
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
-    
+
     static func == (lhs: Material, rhs: Material) -> Bool {
         lhs.id == rhs.id
     }
@@ -875,10 +1259,10 @@ enum FilamentWeight: String, CaseIterable, Identifiable {
     case grams600 = "600g"
     case grams750 = "750g"
     case kilograms1 = "1kg"
-    
+
     var id: String { rawValue }
     var displayName: String { rawValue }
-    
+
     var lengthMeters: String {
         switch self {
         case .grams250: return "82m"
@@ -888,7 +1272,7 @@ enum FilamentWeight: String, CaseIterable, Identifiable {
         case .kilograms1: return "330m"
         }
     }
-    
+
     var hexLength: String {
         switch self {
         case .grams250: return "0082"
@@ -909,18 +1293,18 @@ class MaterialDatabase: ObservableObject {
         Material(name: "TPU", filmamentID: "101004", vendor: "Creality", category: "TPU"),
         Material(name: "Nylon", filmamentID: "101005", vendor: "Creality", category: "Nylon")
     ]
-    
+
     init() {
         loadMaterials()
     }
-    
+
     func loadMaterials() {
         if let data = UserDefaults.standard.data(forKey: "materials"),
            let decoded = try? JSONDecoder().decode([Material].self, from: data) {
             materials = decoded
         }
     }
-    
+
     func saveMaterials() {
         if let encoded = try? JSONEncoder().encode(materials) {
             UserDefaults.standard.set(encoded, forKey: "materials")
@@ -928,81 +1312,100 @@ class MaterialDatabase: ObservableObject {
     }
 }
 
-// MARK: - Bluetooth Manager with Auto-Connect
+// MARK: - Bluetooth Manager
 class BluetoothManager: NSObject, ObservableObject {
     @Published var isConnected = false
     @Published var isScanning = false
     @Published var deviceName = "CFS-Programmer"
     @Published var firmwareVersion = "Unknown"
+    @Published var updateAvailable = false
     @Published var lastMessage = "" {
         didSet {
-            // Force UI update
-            objectWillChange.send()
+            print("[BLE] Message: \(lastMessage)")
+            DispatchQueue.main.async {
+                self.objectWillChange.send()
+            }
         }
     }
-    
+
     private var centralManager: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var txCharacteristic: CBCharacteristic?
     private var rxCharacteristic: CBCharacteristic?
-    
+
     private let serviceUUID = CBUUID(string: "4fafc201-1fb5-459e-8fcc-c5c9c331914b")
     private let rxUUID = CBUUID(string: "beb5483e-36e1-4688-b7f5-ea07361b26a8")
     private let txUUID = CBUUID(string: "1c95d5e3-d8f7-413a-bf3d-7a2e5d7be87e")
-    
+
     override init() {
         super.init()
         centralManager = CBCentralManager(delegate: self, queue: nil)
     }
-    
+
     func startScanning() {
+        guard !isScanning else { return }
         isScanning = true
         centralManager.scanForPeripherals(withServices: [serviceUUID])
+        print("[BLE] Started scanning")
     }
-    
+
     func disconnect() {
         if let peripheral = peripheral {
             centralManager.cancelPeripheralConnection(peripheral)
         }
     }
-    
+
     func sendCommand(_ command: String) {
         guard let peripheral = peripheral,
               let rxChar = rxCharacteristic,
-              let data = command.data(using: .utf8) else { return }
-        
+              let data = command.data(using: .utf8) else {
+            print("[BLE] Cannot send - not connected")
+            return
+        }
+
         peripheral.writeValue(data, for: rxChar, type: .withResponse)
+        print("[BLE] Sent: \(command)")
+    }
+    
+    private func requestFirmwareVersion() {
+        // Device supports this per your firmware
+        sendCommand("GET_VERSION")
     }
 }
 
 // MARK: - CBCentralManagerDelegate
 extension BluetoothManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        if central.state == .poweredOn {
-            startScanning()  // Auto-scan when ready
+        if central.state == .poweredOn && !isConnected {
+            startScanning()
         }
     }
-    
+
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
-        // Auto-connect to first CFS-Programmer found
-        self.peripheral = peripheral
-        centralManager.stopScan()
-        isScanning = false
-        centralManager.connect(peripheral)
+        print("[BLE] Discovered: \(peripheral.name ?? "Unknown")")
+
+        if peripheral.name == "CFS-Programmer" {
+            self.peripheral = peripheral
+            central.stopScan()
+            isScanning = false
+            central.connect(peripheral)
+        }
     }
-    
+
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        print("[BLE] Connected")
         peripheral.delegate = self
         peripheral.discoverServices([serviceUUID])
-        DispatchQueue.main.async {
-            self.isConnected = true
-        }
     }
-    
+
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        print("[BLE] Disconnected")
+        isConnected = false
+        firmwareVersion = "Unknown"
+        startScanning()
+        
         DispatchQueue.main.async {
-            self.isConnected = false
-            self.startScanning()  // Auto-reconnect
+            self.lastMessage = "DISCONNECTED"
         }
     }
 }
@@ -1011,63 +1414,109 @@ extension BluetoothManager: CBCentralManagerDelegate {
 extension BluetoothManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard let services = peripheral.services else { return }
+
         for service in services {
-            peripheral.discoverCharacteristics([rxUUID, txUUID], for: service)
+            if service.uuid == serviceUUID {
+                peripheral.discoverCharacteristics([txUUID, rxUUID], for: service)
+            }
         }
     }
-    
+
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         guard let characteristics = service.characteristics else { return }
-        
+
         for characteristic in characteristics {
-            // Device TX (1c95...) = Mac RX (we receive on this)
             if characteristic.uuid == txUUID {
                 txCharacteristic = characteristic
                 peripheral.setNotifyValue(true, for: characteristic)
-                print("Enabled notifications on device TX characteristic")
-            }
-            // Device RX (beb5...) = Mac TX (we send on this)
-            else if characteristic.uuid == rxUUID {
+                print("[BLE] Subscribed to TX")
+            } else if characteristic.uuid == rxUUID {
                 rxCharacteristic = characteristic
-                print("Found device RX characteristic for sending")
+                print("[BLE] Found RX")
+            }
+        }
+
+        if txCharacteristic != nil && rxCharacteristic != nil {
+            DispatchQueue.main.async {
+                self.isConnected = true
+            }
+            print("[BLE] Ready")
+
+            // ✅ IMPORTANT: request version AFTER notify is enabled
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.requestFirmwareVersion()
             }
         }
     }
-    
+
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard let data = characteristic.value,
-              let message = String(data: data, encoding: .utf8) else { return }
-        
-        print("BLE RX: \(message)")  // Debug output
-        
+        guard characteristic.uuid == txUUID,
+              let data = characteristic.value else { return }
+
+        // Try to decode as UTF-8 first; if it fails, fall back to a lossless conversion
+        let message: String
+        if let utf8 = String(data: data, encoding: .utf8) {
+            message = utf8
+        } else {
+            // BLE payload may include stray bytes; use a hex dump as a fallback
+            let hex = data.map { String(format: "%02X", $0) }.joined()
+            message = "<non-utf8> 0x" + hex
+        }
+
+        print("[BLE RX] \(message)")
+
+        // Handle VERSION message immediately
+        if message.hasPrefix("VERSION:") {
+            let version = message
+                .replacingOccurrences(of: "VERSION:", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "\0", with: "")
+
+            DispatchQueue.main.async {
+                self.firmwareVersion = version
+                print("[BLE] ✅ Firmware version set to: \(version)")
+            }
+            return
+        }
+
+        // Handle all other messages
         DispatchQueue.main.async {
             self.lastMessage = message
-            print("Updated lastMessage to: \(message)")  // Debug output
         }
     }
+
 }
 
 // MARK: - Color Extension
 extension Color {
+    init?(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 6:
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8:
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            return nil
+        }
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue:  Double(b) / 255,
+            opacity: Double(a) / 255
+        )
+    }
+
     func toHex() -> String {
-        let components = NSColor(self).cgColor.components ?? [1, 1, 1]
-        let r = Int(components[0] * 255)
-        let g = Int(components[1] * 255)
-        let b = Int(components[2] * 255)
+        guard let components = NSColor(self).cgColor.components else { return "FFFFFF" }
+        let r = Int(components[0] * 255.0)
+        let g = Int(components[1] * 255.0)
+        let b = Int(components[2] * 255.0)
         return String(format: "%02X%02X%02X", r, g, b)
     }
-    
-    init?(hex: String) {
-        var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
-        
-        var rgb: UInt64 = 0
-        guard Scanner(string: hexSanitized).scanHexInt64(&rgb) else { return nil }
-        
-        let r = Double((rgb & 0xFF0000) >> 16) / 255.0
-        let g = Double((rgb & 0x00FF00) >> 8) / 255.0
-        let b = Double(rgb & 0x0000FF) / 255.0
-        
-        self.init(red: r, green: g, blue: b)
-    }
 }
+

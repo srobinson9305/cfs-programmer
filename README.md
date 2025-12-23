@@ -1,339 +1,402 @@
-# Creality CFS RFID Programmer
+# CFS Programmer
 
-A handheld RFID tag reader/writer for Creality's CFS (Creality Filament System) compatible with K2 Pro and other CFS-enabled 3D printers. This project allows you to read, write, and manage filament spool tags with custom profiles.
+A complete system for reading and writing Creality CFS (Creality Filament System) NFC tags used in K2 Plus/Pro 3D printers.
 
-![Project Status](https://img.shields.io/badge/status-in%20development-yellow)
-![License](https://img.shields.io/badge/license-MIT-blue)
-![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20macOS-lightgrey)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-ESP32--S3-orange)
 
-## 🎯 Features
+## Overview
 
-### Current Features (Reader)
-- ✅ Read Creality CFS RFID tags (MIFARE Classic 1K)
-- ✅ Decrypt and parse tag data (material type, color, length, serial)
-- ✅ UID-based authentication with AES-128 encryption
-- ✅ Support for ESP32-S3 with RC522 RFID module
-- ✅ Complete tag data parsing and display
+This project provides both hardware and software to read, write, and clone Creality CFS tags. Each spool of Creality filament comes with two NFC tags (front and back) containing encrypted information about the filament type, color, length, and serial number.
 
-### Planned Features (Writer)
-- 🚧 Write custom CFS tags for any filament
-- 🚧 Dual-tag writing workflow (front/back labels)
-- 🚧 Verify-after-write functionality
-- 🚧 macOS SwiftUI app for tag management
-- 🚧 BLE communication between handheld and Mac
-- 🚧 Filament database with custom profiles
-- 🚧 K2 Pro integration via SSH/SCP
-- 🚧 Sync with Creality Print 6 profiles
+### Features
 
-## 📋 Table of Contents
+- âœ… **Read CFS Tags** - Decode all tag information (material, length, color, serial)
+- âœ… **Write Dual Tags** - Program matching front/back tag pairs
+- âœ… **Blank Tag Detection** - Identify empty tags ready for writing
+- âœ… **Mac App Interface** - User-friendly macOS application
+- âœ… **OTA Updates** - Update firmware wirelessly from GitHub releases
+- âœ… **Material Database** - Expandable database of filament types
+- âœ… **AES Encryption** - Full encryption/decryption support
+- âœ… **BLE Communication** - Wireless connection to Mac app
 
-- [Hardware Requirements](#hardware-requirements)
-- [Software Requirements](#software-requirements)
-- [Quick Start](#quick-start)
-- [Project Structure](#project-structure)
-- [Tag Format](#tag-format)
-- [Usage](#usage)
-- [Development](#development)
-- [Contributing](#contributing)
-- [License](#license)
-- [Credits](#credits)
+## Hardware Requirements
 
-## 🔧 Hardware Requirements
+| Component | Specification | Notes |
+|-----------|---------------|-------|
+| **Microcontroller** | ESP32-S3 | Any variant with WiFi + BLE |
+| **NFC Reader** | PN532 | I2C mode only |
+| **Display** | SH1106 128x64 OLED | I2C |
+| **LED** | WS2812B RGB | Single addressable LED |
+| **Tags** | MIFARE Classic 1K | For writing new tags |
 
-### ESP32-S3 Reader Setup
-- **Microcontroller:** ESP32-S3 DevKit (or similar)
-- **RFID Module:** RC522 RFID Reader (SPI interface)
-- **Power:** USB-C or 3.7V LiPo battery
-- **Optional:** Status LED (WS2812B), OLED display
+### Wiring
 
-### Wiring Diagram (ESP32-S3 + RC522)
+```
+PN532 NFC Reader:
+  SDA â†’ ESP32 GPIO 8
+  SCL â†’ ESP32 GPIO 9
+  VCC â†’ 3.3V
+  GND â†’ GND
 
-\`\`\`
-RC522 Module     →    ESP32-S3
-─────────────────────────────────
-VCC (3.3V)       →    3.3V
-GND              →    GND
-MISO             →    GPIO 36
-MOSI             →    GPIO 35
-SCK              →    GPIO 39
-SDA (SS)         →    GPIO 38
-RST              →    GPIO 40
-\`\`\`
+SH1106 OLED:
+  SDA â†’ ESP32 GPIO 8 (shared with PN532)
+  SCL â†’ ESP32 GPIO 9 (shared with PN532)
+  VCC â†’ 3.3V
+  GND â†’ GND
 
-### Alternative Hardware
-The firmware also supports:
-- NodeMCU ESP-32S (standard ESP32)
-- Other ESP32 variants with SPI support
+WS2812B LED:
+  DIN â†’ ESP32 GPIO 48
+  VCC â†’ 5V
+  GND â†’ GND
+```
 
-## 💻 Software Requirements
+## Software Components
 
-### Firmware
-- **Arduino IDE:** 1.8.19 or newer (or Arduino IDE 2.x)
-- **ESP32 Board Support:** via Board Manager
-- **Libraries:**
-  - \`MFRC522\` (by GithubCommunity)
-  - \`AESLib\` (by suculent/THiNX - ESP32 compatible fork)
-  - \`SPI\` (built-in)
+### 1. Firmware (ESP32-S3)
 
-### macOS App (Coming Soon)
-- **macOS:** 13.0 (Ventura) or newer
-- **Xcode:** 15.0+
-- **Swift:** 5.9+
+Located in `firmware/`
 
-## 🚀 Quick Start
+- Written in Arduino/C++
+- Handles NFC read/write operations
+- BLE communication with Mac app
+- OTA firmware updates via WiFi
+- Version: 1.2.0
+
+[Firmware Documentation â†’](firmware/README.md)
+
+### 2. Mac App
+
+Located in `mac-app/`
+
+- Native SwiftUI application
+- Connects via Bluetooth LE
+- Material database management
+- WiFi configuration
+- OTA update manager
+- Version: 1.2.0
+
+### 3. Documentation
+
+Located in `docs/`
+
+- `FIRMWARE.md` - Complete firmware documentation
+- `TAG_FORMAT.md` - CFS tag format specification
+- `API.md` - BLE protocol reference
+- `GITHUB_SETUP.md` - OTA update setup guide
+
+## Quick Start
 
 ### 1. Hardware Setup
 
-1. Wire the RC522 module to your ESP32-S3 according to the diagram above
-2. Connect ESP32-S3 to your computer via USB
-3. Verify the RFID module is detected (check I2C scanner if needed)
+1. Wire components according to diagram above
+2. Ensure PN532 is in **I2C mode** (check DIP switches)
+3. Power via USB-C
 
 ### 2. Firmware Installation
 
-1. **Install Arduino IDE and ESP32 Support:**
-   \`\`\`bash
-   # Add ESP32 board support URL in Arduino IDE:
-   # File → Preferences → Additional Board Manager URLs
-   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-   \`\`\`
+```bash
+# Clone repository
+git clone https://github.com/yourusername/cfs-programmer.git
+cd cfs-programmer
 
-2. **Install Required Libraries:**
-   - Open Arduino IDE
-   - Go to **Sketch → Include Library → Manage Libraries**
-   - Search and install:
-     - \`MFRC522\`
-     - \`AESLib\` (by suculent/THiNX)
+# Open firmware in Arduino IDE
+open firmware/CFS_Handheld_v1.2_OTA/CFS_Handheld_v1.2_OTA.ino
 
-3. **Configure Board Settings:**
-   - Board: \`ESP32S3 Dev Module\`
-   - Upload Speed: \`921600\`
-   - USB CDC On Boot: \`Enabled\`
-   - Port: Select your ESP32-S3 port
+# CRITICAL: Apply library patch (see firmware/README.md)
 
-4. **Upload Firmware:**
-   \`\`\`bash
-   # Open the sketch
-   cd firmware/CFS_Tag_Reader/
-   # Open CFS_Tag_Reader.ino in Arduino IDE
-   # Click Upload button or Ctrl+U
-   \`\`\`
+# Install required libraries via Library Manager:
+# - Adafruit PN532
+# - U8g2
+# - Adafruit NeoPixel
+# - AESLib
+# - ArduinoJson
 
-### 3. Test the Reader
+# Select board: ESP32S3 Dev Module
+# Upload to device
+```
 
-1. Open Serial Monitor (115200 baud)
-2. Place a Creality CFS tag on the RC522 reader
-3. You should see output like:
+**âš ï¸ IMPORTANT:** You must apply the PN532 library patch or authentication will fail. See [firmware/README.md](firmware/README.md) for details.
 
-\`\`\`
-========================================
-✅ TAG DETECTED!
-========================================
-UID: 60 EA 12 21
-Generated Key: 1F 1E 83 A9 71 82
+### 3. Mac App Installation
 
-✅ READ SUCCESS!
-========================================
-Raw  AB1240276A21010010FFFFFF0165000001000000
+```bash
+# Open Xcode project
+open mac-app/CFS\ Programmer.xcodeproj
 
-╔════════════════════════════════════════╗
-║       CFS TAG INFORMATION              ║
-╚════════════════════════════════════════╝
-Date:         AB124 (Oct 11, 2024)
-Vendor ID:    0276 (Creality)
-Batch:        A2
-Filament ID:  101001 (PLA)
-Color:        0FFFFFF (RGB: #FFFFFF)
-Length:       0165 (165m / 500g)
-Serial:       000001
-\`\`\`
+# Build and run (âŒ˜R)
+```
 
-## 📁 Project Structure
+### 4. First Use
 
-\`\`\`
-creality-cfs-programmer/
-├── README.md                          # This file
-├── LICENSE                            # MIT License
-├── docs/                              # Documentation
-│   ├── cfs-tag-format.md             # Complete CFS format specification
-│   ├── hardware-setup.md             # Detailed wiring guides
-│   ├── ble-protocol.md               # BLE command protocol (planned)
-│   └── images/                       # Photos and diagrams
-├── firmware/                          # Arduino/ESP32 firmware
-│   ├── CFS_Tag_Reader/               # Main reader sketch
-│   │   ├── CFS_Tag_Reader.ino       # Main program
-│   │   └── README.md                 # Firmware documentation
-│   └── examples/                     # Example sketches
-│       └── I2C_Scanner/              # I2C device detection
-├── macos-app/                         # macOS SwiftUI app (coming soon)
-│   └── README.md
-├── tools/                             # Utilities and scripts
-│   └── decrypt-tag.py                # Python tag decryption tool
-└── examples/                          # Sample data
-    └── sample-tags.json              # Example tag data
-\`\`\`
+1. Power on ESP32 device
+2. Open Mac app
+3. App auto-connects to device
+4. Configure WiFi (Settings â†’ WiFi Setup)
+5. Ready to read/write tags!
 
-## 🏷️ Tag Format
+## Usage
 
-CFS tags use **MIFARE Classic 1K** with custom AES-128 encryption:
+### Reading a Tag
 
-### Data Structure (48 ASCII characters)
+1. Click **Read Tag** in Mac app
+2. Place CFS tag on PN532 reader
+3. Tag information displays immediately
+4. View material, length, color, and serial number
 
-\`\`\`
-Position:  0-4   5-8   9-10  11-16   17-23    24-27  28-33   34-39   40-47
-Field:     Date  Vend  Batch MatID   Color    Length Serial  Reserve Padding
-Length:    5     4     2     6       7        4      6       6       8
-Example:   AB124 0276  A2    101001  0FFFFFF  0165   000001  000000  00000000
-\`\`\`
+### Writing Tags
 
-### Encryption Keys
+1. Click **Write Tags** in Mac app
+2. Select material from database
+3. Choose weight (250g, 500g, 1kg, etc.)
+4. Pick color
+5. Enter serial (or auto-generate)
+6. Click **Write Both Tags**
+7. Place first blank tag â†’ writes
+8. Place second blank tag â†’ writes
+9. Done! Both tags have identical data
 
-Two AES-128 keys are used:
-- **u_key:** Generates MIFARE authentication key from UID
-- **d_key:** Encrypts/decrypts tag data (ECB mode)
+### OTA Updates
 
-See [\`docs/cfs-tag-format.md\`](docs/cfs-tag-format.md) for complete specifications.
+1. Settings â†’ WiFi Setup â†’ Configure network
+2. Settings â†’ Check for Updates
+3. If available, click Install Update
+4. Wait 30-60 seconds
+5. Device reboots with new firmware
 
-## 📖 Usage
+## Project Structure
 
-### Reading Tags
+```
+cfs-programmer/
+â”œâ”€â”€ firmware/                      # ESP32 firmware
+â”‚   â”œâ”€â”€ CFS_Handheld_v1.2_OTA/
+â”‚   â”‚   â””â”€â”€ CFS_Handheld_v1.2_OTA.ino
+â”‚   â””â”€â”€ README.md
+â”œâ”€â”€ mac-app/                       # macOS application
+â”‚   â”œâ”€â”€ CFS Programmer.xcodeproj
+â”‚   â””â”€â”€ CFS Programmer/
+â”‚       â”œâ”€â”€ ContentView.swift
+â”‚       â”œâ”€â”€ CFS_ProgrammerApp.swift
+â”‚       â””â”€â”€ Assets.xcassets
+â”œâ”€â”€ hardware/                      # Hardware documentation
+â”‚   â””â”€â”€ wiring-diagrams/
+â”œâ”€â”€ docs/                          # Documentation
+â”‚   â”œâ”€â”€ FIRMWARE.md
+â”‚   â”œâ”€â”€ TAG_FORMAT.md
+â”‚   â”œâ”€â”€ API.md
+â”‚   â””â”€â”€ GITHUB_SETUP.md
+â”œâ”€â”€ .github/
+â”‚   â””â”€â”€ workflows/
+â”‚       â””â”€â”€ release-firmware.yml   # Auto-build on release
+â”œâ”€â”€ .gitignore
+â”œâ”€â”€ README.md
+â””â”€â”€ LICENSE
+```
 
-Simply place a CFS tag on the reader. The firmware will:
-1. Detect the tag and read its UID
-2. Generate the authentication key from the UID
-3. Authenticate to the secure sectors
-4. Read and decrypt blocks 4-6
-5. Parse and display all tag information
+## How It Works
 
-### Writing Tags (Coming Soon)
+### CFS Tag Format
 
-The writer functionality will allow:
-- Creating tags for any filament brand/type
-- Custom material profiles
-- Dual-tag writing (front/back of spool)
-- Automatic verification
+CFS tags are **MIFARE Classic 1K** NFC tags containing 48 bytes of encrypted data:
 
-## 🛠️ Development
+```
+[Date][Vendor][??][Film ID][Color ][Length][Serial][Reserved]
+  5     4      2     6        7      4      6       14 bytes
+```
 
-### Building from Source
+Example:
+```
+ABC2112 0276 A2 101001 0FFFFFF 0330 123456 00000000000000
+â”‚       â”‚    â”‚  â”‚      â”‚       â”‚    â”‚      â””â”€ Reserved
+â”‚       â”‚    â”‚  â”‚      â”‚       â”‚    â””â”€ Serial number
+â”‚       â”‚    â”‚  â”‚      â”‚       â””â”€ Length (816m hex)
+â”‚       â”‚    â”‚  â”‚      â””â”€ Color (#FFFFFF)
+â”‚       â”‚    â”‚  â””â”€ Film ID (PLA = 101001)
+â”‚       â”‚    â””â”€ Batch code
+â”‚       â””â”€ Vendor (Creality = 0276)
+â””â”€ Date code
+```
 
-\`\`\`bash
-# Clone the repository
-git clone https://github.com/yourusername/creality-cfs-programmer.git
-cd creality-cfs-programmer
+### Encryption
 
-# Firmware
-cd firmware/CFS_Tag_Reader
-# Open in Arduino IDE and upload
+- **Algorithm:** AES-128 CBC
+- **Keys:** Hardcoded (same as Creality printers)
+- **IV:** All zeros
+- **UID-based authentication:** MIFARE keys derived from tag UID
 
-# macOS App (when available)
-cd macos-app
-open CFSProgrammer.xcodeproj
-# Build in Xcode
-\`\`\`
+[Full Tag Format Documentation â†’](docs/TAG_FORMAT.md)
 
-### Debugging
+## Compatible Printers
 
-Enable verbose output in the firmware:
-\`\`\`cpp
-#define DEBUG_MODE true  // Add to top of .ino file
-\`\`\`
+- âœ… Creality K2 Plus
+- âœ… Creality K2 Pro
+- âš ï¸ Creality K1 Series (may work, needs testing)
+- âš ï¸ CR-Series with CFS retrofit (untested)
 
-View detailed encryption/decryption steps:
-\`\`\`bash
-# Serial monitor will show:
-# - UID processing
-# - Key generation
-# - Block-by-block decryption
-# - Raw hex data
-\`\`\`
+## Compatible Tags
+
+For writing new tags:
+
+- âœ… **MIFARE Classic 1K** (NXP original)
+- âœ… **MIFARE Classic 1K S50** (Chinese clones)
+- âœ… **FM11RF08** (compatible IC)
+- âŒ MIFARE Ultralight (too small)
+- âŒ NTAG215/216 (different protocol)
+
+## Development
+
+### Building Firmware
+
+```bash
+arduino-cli compile --fqbn esp32:esp32:esp32s3 firmware/CFS_Handheld_v1.2_OTA/
+```
+
+### Creating a Release
+
+```bash
+# Update version in firmware code
+# Commit changes
+git add firmware/
+git commit -m "Release firmware v1.3.0"
+
+# Create tag
+git tag -a fw-v1.3.0 -m "Firmware v1.3.0 - New features"
+
+# Push (triggers GitHub Actions)
+git push origin main
+git push origin fw-v1.3.0
+```
+
+GitHub Actions automatically builds and creates release with .bin file.
 
 ### Testing
 
-Test with the provided sample tags in \`examples/sample-tags.json\`:
-\`\`\`json
-{
-  "tag1": {
-    "uid": "60EA1221",
-    "encrypted_data": "73C95387D6F578C5...",
-    "expected_output": "AB1240276A21010010FFFFFF0165000001000000"
-  }
-}
-\`\`\`
+1. **Hardware:** Test on real ESP32 + PN532
+2. **Tags:** Test with genuine Creality tags and blanks
+3. **BLE:** Test Mac app connection and commands
+4. **OTA:** Test update from previous version
 
-## 🤝 Contributing
+## Troubleshooting
 
-Contributions are welcome! This project is in active development.
+### Tags won't authenticate
 
-### Priority Areas
-1. **Hardware testing:** Verify compatibility with different ESP32 boards
-2. **Tag writing:** Implement safe write operations
-3. **macOS app:** SwiftUI interface and BLE communication
-4. **Documentation:** Improve setup guides and troubleshooting
+**Solution:** Apply the PN532 library patch (see firmware/README.md). This is the #1 issue.
 
-### How to Contribute
+### BLE won't connect
+
+**Solutions:**
+- Restart ESP32 device
+- Restart Mac Bluetooth
+- Check device is advertising (Serial Monitor)
+
+### OTA update fails
+
+**Solutions:**
+- Verify WiFi credentials
+- Check WiFi signal strength
+- Ensure GitHub release has .bin file
+- Monitor Serial output for errors
+
+[Full Troubleshooting Guide â†’](docs/FIRMWARE.md#troubleshooting)
+
+## Known Issues
+
+- PN532 library timing bug (fixed with SLOWDOWN patch)
+- Some Chinese MIFARE clones may have authentication issues
+- First BLE connection after boot can be slow (~5 seconds)
+
+## Roadmap
+
+### v1.3.0 (Planned)
+- [ ] ESP32-2432S028R support (touchscreen version)
+- [ ] Write function implementation in firmware
+- [ ] Tag history/database in Mac app
+- [ ] Batch write mode (multiple sets)
+
+### v2.0.0 (Future)
+- [ ] iOS app version
+- [ ] Web interface for device
+- [ ] Material profiles from cloud
+- [ ] Tag usage analytics
+
+## Contributing
+
+Contributions welcome!
 
 1. Fork the repository
-2. Create a feature branch (\`git checkout -b feature/amazing-feature\`)
-3. Commit your changes (\`git commit -m 'Add amazing feature'\`)
-4. Push to the branch (\`git push origin feature/amazing-feature\`)
-5. Open a Pull Request
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
 
-Please ensure:
-- Code follows existing style conventions
-- All tests pass (when test suite exists)
-- Documentation is updated for new features
+### Areas to Contribute
 
-## 📄 License
+- ESP32-2432S028R migration
+- iOS app development
+- Additional material profiles
+- Documentation improvements
+- Testing with different tag brands
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## License
 
-## 🙏 Credits
+MIT License
 
-### Inspiration and Research
-- **[DnG-Crafts/K2-RFID](https://github.com/DnG-Crafts/K2-RFID)** - Original reverse engineering of Creality CFS format
-- Creality K2 Pro community for testing and feedback
+Copyright (c) 2025 CFS Programmer Contributors
 
-### Libraries Used
-- [MFRC522](https://github.com/miguelbalboa/rfid) - RFID communication
-- [THiNX AESLib](https://github.com/suculent/thinx-aes-lib) - ESP32-compatible AES encryption
-- ESP32 Arduino Core - Espressif Systems
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-## 📞 Support
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-- **Issues:** [GitHub Issues](https://github.com/yourusername/creality-cfs-programmer/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/yourusername/creality-cfs-programmer/discussions)
-- **Email:** your.email@example.com
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
-## 🗺️ Roadmap
+## Legal Notice
 
-### Phase 1: Reader (Current)
-- [x] Basic tag reading
-- [x] AES decryption
-- [x] Tag parsing and display
-- [ ] Multiple tag format support
+This project is for educational and personal use only. Use responsibly:
 
-### Phase 2: Writer
-- [ ] Tag writing functionality
-- [ ] Dual-tag workflow
-- [ ] Write verification
-- [ ] Backup/restore tags
+- âœ… Clone your own tags for backup
+- âœ… Create custom tags for personal use
+- âŒ Don't counterfeit commercial tags
+- âŒ Don't violate Creality's intellectual property
 
-### Phase 3: macOS Integration
-- [ ] SwiftUI application
-- [ ] BLE communication
-- [ ] Filament database
-- [ ] K2 Pro SSH integration
-- [ ] Creality Print 6 sync
+The developers are not responsible for misuse of this software.
 
-### Phase 4: Advanced Features
-- [ ] Tag cloning/duplication
-- [ ] Batch tag programming
-- [ ] Custom material profiles
-- [ ] Web interface (optional)
-- [ ] Mobile app (iOS/Android)
+## Acknowledgments
+
+- Creality for creating an interesting NFC tag system
+- Adafruit for the PN532 library
+- ESP32 community for excellent documentation
+- All contributors and testers
+
+## Support
+
+- **Documentation:** See `docs/` folder
+- **Issues:** [GitHub Issues](https://github.com/yourusername/cfs-programmer/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/yourusername/cfs-programmer/discussions)
+
+## Authors
+
+Created by the maker community for the maker community.
+
+## See Also
+
+- [Firmware Documentation](firmware/README.md)
+- [Tag Format Specification](docs/TAG_FORMAT.md)
+- [API Reference](docs/API.md)
+- [OTA Setup Guide](docs/GITHUB_SETUP.md)
 
 ---
 
-**Made with ❤️ for the 3D printing community**
-
-*If this project helped you, please consider giving it a ⭐️ on GitHub!*
+**Made with â¤ï¸ for the 3D printing community**
