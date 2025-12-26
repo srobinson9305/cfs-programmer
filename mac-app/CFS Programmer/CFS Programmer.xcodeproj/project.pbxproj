@@ -21,6 +21,21 @@
 			path = "CFS Programmer";
 			sourceTree = "<group>";
 		};
+		773A32302EFCBB2200657AB9 /* Models */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Models;
+			sourceTree = "<group>";
+		};
+		773A323E2EFCBC8A00657AB9 /* Managers */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Managers;
+			sourceTree = "<group>";
+		};
+		773A32422EFCBCBB00657AB9 /* Utilities */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Utilities;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -40,6 +55,9 @@
 				773A321E2EF719C100657AB9 /* CFS Programmer */,
 				773A321D2EF719C100657AB9 /* Products */,
 				773A322A2EF719E400657AB9 /* ContentView.swift */,
+				773A32302EFCBB2200657AB9 /* Models */,
+				773A32422EFCBCBB00657AB9 /* Utilities */,
+				773A323E2EFCBC8A00657AB9 /* Managers */,
 			);
 			sourceTree = "<group>";
 		};
@@ -68,6 +86,9 @@
 			);
 			fileSystemSynchronizedGroups = (
 				773A321E2EF719C100657AB9 /* CFS Programmer */,
+				773A32302EFCBB2200657AB9 /* Models */,
+				773A323E2EFCBC8A00657AB9 /* Managers */,
+				773A32422EFCBCBB00657AB9 /* Utilities */,
 			);
 			name = "CFS Programmer";
 			packageProductDependencies = (

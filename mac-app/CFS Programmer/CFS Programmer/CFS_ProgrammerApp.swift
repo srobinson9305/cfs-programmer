@@ -13,13 +13,13 @@ import SwiftUI
 @main
 struct CFS_ProgrammerApp: App {
     @StateObject private var bluetoothManager = BluetoothManager()
-    @StateObject private var materialDatabase = MaterialDatabase()
+    @StateObject private var databaseManager = DatabaseManager.shared
     
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(bluetoothManager)
-                .environmentObject(materialDatabase)
+                .environmentObject(databaseManager)
                 .frame(minWidth: 1000, minHeight: 700)
         }
         .commands {

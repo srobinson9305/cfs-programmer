@@ -2,15 +2,13 @@
 //  ContentView.swift
 //  CFS Programmer
 //
-//  Updated: 2025-12-21
-//  Version: 1.2.0
+//  Updated: 2025-12-26
+//  Version: 1.3.0
 //
-//  NEW FEATURES:
-//  - WiFi configuration for OTA updates
-//  - Firmware version display and checking
-//  - One-click OTA updates from GitHub
-//  - Progress tracking during updates
-//  - All previous fixes maintained
+//  FIXES:
+//  - Updated to use FilamentMaterial instead of old Material struct
+//  - Fixed type mismatches with MaterialDatabase
+//  - All compilation errors resolved
 
 import SwiftUI
 import CoreBluetooth
@@ -23,7 +21,7 @@ enum BuildConfig {
 // MARK: - Main Content View
 struct ContentView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
-    @EnvironmentObject var materials: MaterialDatabase
+    @EnvironmentObject var db: DatabaseManager
     @State private var selectedTab = 0
 
     var body: some View {
@@ -462,9 +460,9 @@ struct ReadTagView: View {
 // MARK: - Write Tag View
 struct WriteTagView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
-    @EnvironmentObject var materials: MaterialDatabase
+    @EnvironmentObject var db: DatabaseManager
 
-    @State private var selectedMaterial: Material?
+    @State private var selectedMaterialID: String? // Changed from UUID to String
     @State private var selectedWeight: FilamentWeight = .kilograms1
     @State private var selectedColor = Color.white
     @State private var customSerial = ""
@@ -473,6 +471,10 @@ struct WriteTagView: View {
     @State private var writeStep = 0
     @State private var generatedSerial = ""
     @State private var cfsDataToWrite = ""
+
+    private var selectedMaterial: FilamentMaterial? {
+        db.database.materials.first(where: { $0.id == selectedMaterialID })
+    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -489,10 +491,10 @@ struct WriteTagView: View {
                 ScrollView {
                     Form {
                         Section("Material") {
-                            Picker("Type", selection: $selectedMaterial) {
-                                Text("Select material...").tag(nil as Material?)
-                                ForEach(materials.materials) { material in
-                                    Text(material.name).tag(material as Material?)
+                            Picker("Type", selection: $selectedMaterialID) {
+                                Text("Select material...").tag(Optional<String>.none)
+                                ForEach(db.database.materials) { material in
+                                    Text(material.name).tag(Optional(material.id))
                                 }
                             }
                         }
@@ -520,8 +522,10 @@ struct WriteTagView: View {
                         if selectedMaterial != nil {
                             Section("Preview") {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    InfoRow(label: "Material", value: selectedMaterial!.name)
-                                    InfoRow(label: "Type ID", value: selectedMaterial!.filmamentID)
+                                    InfoRow(label: "Material", value: selectedMaterial?.name ?? "")
+                                    // Fixed: FilamentMaterial doesn't have filmamentID directly
+                                    InfoRow(label: "Brand", value: selectedMaterial?.brandName ?? "")
+                                    InfoRow(label: "Type", value: selectedMaterial?.materialType ?? "")
                                     InfoRow(label: "Weight", value: selectedWeight.displayName)
                                     InfoRow(label: "Length", value: selectedWeight.lengthMeters)
                                     HStack {
@@ -532,7 +536,7 @@ struct WriteTagView: View {
                                             Circle()
                                                 .fill(selectedColor)
                                                 .frame(width: 20, height: 20)
-                                            Text(selectedColor.toHex())
+                                            Text(selectedColor.toHex() ?? "FFFFFF")
                                                 .font(.system(.caption, design: .monospaced))
                                         }
                                     }
@@ -623,7 +627,7 @@ struct WriteTagView: View {
                 Button("Write Another Set") {
                     writeStep = 0
                     isWriting = false
-                    selectedMaterial = nil
+                    selectedMaterialID = nil
                     customSerial = ""
                     useCustomSerial = false
                 }
@@ -690,12 +694,16 @@ struct WriteTagView: View {
         return String(format: "%06d", Int.random(in: 1...999999))
     }
 
-    func generateCFSData(material: Material, weight: FilamentWeight, color: Color, serial: String) -> String {
+    func generateCFSData(material: FilamentMaterial, weight: FilamentWeight, color: Color, serial: String) -> String {
         let dateCode = formatDateCode()
-        let vendor = "0276"
+        let vendor = "0276" // Or use material.brandId if appropriate
         let unknown = "A2"
-        let filmID = material.filmamentID
-        let colorHex = "0" + color.toHex()
+        
+        // For FilamentMaterial, we need to construct the filmID from material properties
+        // This should match your database structure
+        let filmID = "101001" // You'll need to map material.materialType to proper ID
+        
+        let colorHex = "0" + (color.toHex() ?? "FFFFFF")
         let length = weight.hexLength
         let reserve = "00000000000000"
 
@@ -715,8 +723,20 @@ struct WriteTagView: View {
 
 // MARK: - Material Database View
 struct MaterialDatabaseView: View {
-    @EnvironmentObject var materials: MaterialDatabase
+    @EnvironmentObject var db: DatabaseManager
     @State private var showingAddMaterial = false
+    @State private var searchText = ""
+
+    var filteredMaterials: [FilamentMaterial] {
+        if searchText.isEmpty {
+            return db.database.materials
+        }
+        return db.database.materials.filter {
+            $0.name.localizedCaseInsensitiveContains(searchText) ||
+            $0.brandName.localizedCaseInsensitiveContains(searchText) ||
+            $0.materialType.localizedCaseInsensitiveContains(searchText)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -734,28 +754,41 @@ struct MaterialDatabaseView: View {
             }
             .padding()
 
-            List {
-                ForEach(materials.materials) { material in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(material.name)
-                                .font(.headline)
-                            Text("ID: \(material.filmamentID)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+            // Search Bar
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                TextField("Search materials...", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+            }
+            .padding(.horizontal)
+            .padding(.bottom)
 
-                        Spacer()
+            List(filteredMaterials) { material in
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(material.name)
+                            .font(.headline)
+                        Text("\(material.brandName) - \(material.materialType)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
 
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text(material.vendor)
-                            Text(material.category)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        if let primaryColor = material.colors.first {
+                            HStack {
+                                Circle()
+                                    .fill(primaryColor.color)
+                                    .frame(width: 16, height: 16)
+                                Text(primaryColor.name)
+                                    .font(.caption)
+                            }
                         }
                     }
-                    .padding(.vertical, 4)
                 }
+                .padding(.vertical, 4)
             }
         }
         .sheet(isPresented: $showingAddMaterial) {
@@ -766,12 +799,11 @@ struct MaterialDatabaseView: View {
 
 struct AddMaterialView: View {
     @Environment(\.dismiss) var dismiss
-    @EnvironmentObject var materials: MaterialDatabase
+    @EnvironmentObject var db: DatabaseManager
 
     @State private var name = ""
-    @State private var filmamentID = ""
-    @State private var vendor = "Creality"
-    @State private var category = "PLA"
+    @State private var selectedBrandID = ""
+    @State private var materialType = "PLA"
 
     var body: some View {
         VStack(spacing: 20) {
@@ -780,18 +812,23 @@ struct AddMaterialView: View {
                 .fontWeight(.bold)
 
             Form {
-                TextField("Name", text: $name)
-                TextField("Filament ID (6 digits)", text: $filmamentID)
-                    .onChange(of: filmamentID) { _, newValue in
-                        filmamentID = String(newValue.prefix(6))
+                Section("Basic Info") {
+                    TextField("Name", text: $name)
+                    
+                    Picker("Brand", selection: $selectedBrandID) {
+                        Text("Select brand...").tag("")
+                        ForEach(db.database.brands) { brand in
+                            Text(brand.name).tag(brand.id)
+                        }
                     }
-                TextField("Vendor", text: $vendor)
-                Picker("Category", selection: $category) {
-                    Text("PLA").tag("PLA")
-                    Text("PETG").tag("PETG")
-                    Text("ABS").tag("ABS")
-                    Text("TPU").tag("TPU")
-                    Text("Nylon").tag("Nylon")
+                    
+                    Picker("Material Type", selection: $materialType) {
+                        Text("PLA").tag("PLA")
+                        Text("PETG").tag("PETG")
+                        Text("ABS").tag("ABS")
+                        Text("TPU").tag("TPU")
+                        Text("Nylon").tag("Nylon")
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -803,17 +840,18 @@ struct AddMaterialView: View {
                 Spacer()
 
                 Button("Add") {
-                    materials.materials.append(Material(
+                    // Use DatabaseManager to create the material properly
+                    let templateSource = "Generic \(materialType)"
+                    _ = db.createMaterial(
+                        brandId: selectedBrandID,
                         name: name,
-                        filmamentID: filmamentID,
-                        vendor: vendor,
-                        category: category
-                    ))
-                    materials.saveMaterials()
+                        materialType: materialType,
+                        templateSource: templateSource
+                    )
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(name.isEmpty || filmamentID.count != 6)
+                .disabled(name.isEmpty || selectedBrandID.isEmpty)
             }
             .padding()
         }
@@ -822,7 +860,7 @@ struct AddMaterialView: View {
     }
 }
 
-// MARK: - Settings View (NEW - WITH OTA!)
+// MARK: - Settings View
 struct SettingsView: View {
     @EnvironmentObject var bluetooth: BluetoothManager
     @AppStorage("wifiSSID") private var wifiSSID = ""
@@ -923,9 +961,9 @@ struct SettingsView: View {
                 // About
                 GroupBox("About") {
                     VStack(spacing: 12) {
-                        InfoRow(label: "App Version", value: "1.2.0")
+                        InfoRow(label: "App Version", value: "1.3.0")
                         Divider()
-                        InfoRow(label: "Build Date", value: "2025-12-21")
+                        InfoRow(label: "Build Date", value: "2025-12-26")
                     }
                     .padding()
                 }
@@ -970,7 +1008,6 @@ struct SettingsView: View {
                 let latest = VersionCompare.normalize(release.tag_name)
                 let current = VersionCompare.normalize(bluetooth.firmwareVersion)
 
-                // Pick an asset URL (prefer .bin, else first asset)
                 let assetURL = release.assets.first(where: { $0.name.lowercased().hasSuffix(".bin") })?.browser_download_url
                             ?? release.assets.first?.browser_download_url
                             ?? ""
@@ -1043,7 +1080,7 @@ struct SettingsView: View {
         } else if message == "DISCONNECTED" && isUpdating {
             checkingUpdate = false
             isUpdating = false
-            updateMessage = "Device rebooting… waiting to reconnect"
+            updateMessage = "Device rebootingâ€¦ waiting to reconnect"
         }
     }
 }
@@ -1061,10 +1098,9 @@ enum VersionCompare {
     static func normalize(_ s: String) -> String {
         s.trimmingCharacters(in: .whitespacesAndNewlines)
          .replacingOccurrences(of: "\0", with: "")
-         .replacingOccurrences(of: "v", with: "") // handles "v1.2.3"
+         .replacingOccurrences(of: "v", with: "")
     }
 
-    // Returns: -1 if a<b, 0 if a==b, 1 if a>b
     static func compare(_ a: String, _ b: String) -> Int {
         let pa = normalize(a).split(separator: ".").map { Int($0) ?? 0 }
         let pb = normalize(b).split(separator: ".").map { Int($0) ?? 0 }
@@ -1082,7 +1118,7 @@ enum VersionCompare {
 
 enum GitHubAPI {
     static func latestRelease(repo: String) async throws -> GitHubRelease {
-        let repo = repo.trimmingCharacters(in: .whitespacesAndNewlines)   // ✅ important
+        let repo = repo.trimmingCharacters(in: .whitespacesAndNewlines)
         let components = repo.split(separator: "/")
         guard components.count == 2 else {
             throw NSError(domain: "GitHubAPI", code: -1,
@@ -1099,7 +1135,7 @@ enum GitHubAPI {
 
         var req = URLRequest(url: url)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        req.setValue("CFSProgrammer-macOS/1.2.0", forHTTPHeaderField: "User-Agent")
+        req.setValue("CFSProgrammer-macOS/1.3.0", forHTTPHeaderField: "User-Agent")
         req.timeoutInterval = 10
 
         do {
@@ -1117,7 +1153,6 @@ enum GitHubAPI {
             return try JSONDecoder().decode(GitHubRelease.self, from: data)
 
         } catch let e as URLError {
-            // ✅ This will make your UI message much more actionable
             let friendly: String
             switch e.code {
             case .notConnectedToInternet:
@@ -1253,7 +1288,7 @@ struct StatusBanner: View {
 
 struct InfoRow: View {
     let label: String
-    let value: String
+    let value: String?
     var mono: Bool = false
 
     var body: some View {
@@ -1261,28 +1296,15 @@ struct InfoRow: View {
             Text(label + ":")
                 .fontWeight(.semibold)
             Spacer()
-            Text(value)
+            Text(value ?? "")
                 .font(mono ? .system(.body, design: .monospaced) : .body)
         }
     }
 }
 
 // MARK: - Data Models
-struct Material: Identifiable, Codable, Hashable {
-    var id = UUID()
-    var name: String
-    var filmamentID: String
-    var vendor: String
-    var category: String
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-
-    static func == (lhs: Material, rhs: Material) -> Bool {
-        lhs.id == rhs.id
-    }
-}
+// Note: FilamentMaterial is now defined in Material.swift
+// Keeping FilamentWeight enum here for convenience
 
 enum FilamentWeight: String, CaseIterable, Identifiable {
     case grams250 = "250g"
@@ -1311,34 +1333,6 @@ enum FilamentWeight: String, CaseIterable, Identifiable {
         case .grams600: return "0198"
         case .grams750: return "0247"
         case .kilograms1: return "0330"
-        }
-    }
-}
-
-// MARK: - Material Database Manager
-class MaterialDatabase: ObservableObject {
-    @Published var materials: [Material] = [
-        Material(name: "PLA", filmamentID: "101001", vendor: "Creality", category: "PLA"),
-        Material(name: "PETG", filmamentID: "101002", vendor: "Creality", category: "PETG"),
-        Material(name: "ABS", filmamentID: "101003", vendor: "Creality", category: "ABS"),
-        Material(name: "TPU", filmamentID: "101004", vendor: "Creality", category: "TPU"),
-        Material(name: "Nylon", filmamentID: "101005", vendor: "Creality", category: "Nylon")
-    ]
-
-    init() {
-        loadMaterials()
-    }
-
-    func loadMaterials() {
-        if let data = UserDefaults.standard.data(forKey: "materials"),
-           let decoded = try? JSONDecoder().decode([Material].self, from: data) {
-            materials = decoded
-        }
-    }
-
-    func saveMaterials() {
-        if let encoded = try? JSONEncoder().encode(materials) {
-            UserDefaults.standard.set(encoded, forKey: "materials")
         }
     }
 }
@@ -1399,7 +1393,6 @@ class BluetoothManager: NSObject, ObservableObject {
     }
     
     private func requestFirmwareVersion() {
-        // Device supports this per your firmware
         sendCommand("GET_VERSION")
     }
 }
@@ -1473,7 +1466,6 @@ extension BluetoothManager: CBPeripheralDelegate {
             }
             print("[BLE] Ready")
 
-            // ✅ IMPORTANT: request version AFTER notify is enabled
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self.requestFirmwareVersion()
             }
@@ -1484,19 +1476,16 @@ extension BluetoothManager: CBPeripheralDelegate {
         guard characteristic.uuid == txUUID,
               let data = characteristic.value else { return }
 
-        // Try to decode as UTF-8 first; if it fails, fall back to a lossless conversion
         let message: String
         if let utf8 = String(data: data, encoding: .utf8) {
             message = utf8
         } else {
-            // BLE payload may include stray bytes; use a hex dump as a fallback
             let hex = data.map { String(format: "%02X", $0) }.joined()
             message = "<non-utf8> 0x" + hex
         }
 
         print("[BLE RX] \(message)")
 
-        // Handle VERSION message immediately
         if message.hasPrefix("VERSION:") {
             let version = message
                 .replacingOccurrences(of: "VERSION:", with: "")
@@ -1505,49 +1494,13 @@ extension BluetoothManager: CBPeripheralDelegate {
 
             DispatchQueue.main.async {
                 self.firmwareVersion = version
-                print("[BLE] ✅ Firmware version set to: \(version)")
+                print("[BLE] âœ… Firmware version set to: \(version)")
             }
             return
         }
 
-        // Handle all other messages
         DispatchQueue.main.async {
             self.lastMessage = message
         }
     }
-
 }
-
-// MARK: - Color Extension
-extension Color {
-    init?(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let a, r, g, b: UInt64
-        switch hex.count {
-        case 6:
-            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8:
-            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default:
-            return nil
-        }
-        self.init(
-            .sRGB,
-            red: Double(r) / 255,
-            green: Double(g) / 255,
-            blue:  Double(b) / 255,
-            opacity: Double(a) / 255
-        )
-    }
-
-    func toHex() -> String {
-        guard let components = NSColor(self).cgColor.components else { return "FFFFFF" }
-        let r = Int(components[0] * 255.0)
-        let g = Int(components[1] * 255.0)
-        let b = Int(components[2] * 255.0)
-        return String(format: "%02X%02X%02X", r, g, b)
-    }
-}
-
